@@ -3,9 +3,10 @@
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Search, Check, X, Loader2, UserCheck, ClipboardCheck } from "lucide-react";
+import { Search, Check, X, Loader2, UserCheck, ClipboardCheck, FlaskConical } from "lucide-react";
 import { searchPatientsAction } from "@/lib/actions/patients";
 import { createOrderAction } from "@/lib/actions/orders";
+import { linkOrderToAppointmentAction } from "@/lib/actions/appointments";
 import { Button } from "@/components/ui/button";
 import { Input, Textarea } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -43,9 +44,11 @@ type PatientLite = {
 export function NewOrderForm({
   studies,
   initialPatient,
+  citaId = null,
 }: {
   studies: StudyOption[];
   initialPatient: PatientLite | null;
+  citaId?: string | null;
 }) {
   const router = useRouter();
   const [patient, setPatient] = useState<PatientLite | null>(initialPatient);
@@ -104,6 +107,7 @@ export function NewOrderForm({
         toast.error(res.error);
         return;
       }
+      if (citaId && res.orderId) await linkOrderToAppointmentAction(citaId, res.orderId);
       toast.success(`Orden ${res.codigo} creada`);
       router.push(`/ordenes/${res.orderId}` as never);
     });
@@ -268,8 +272,8 @@ export function NewOrderForm({
             </div>
 
             <Button className="w-full" onClick={submit} disabled={saving}>
-              {saving && <Loader2 className="h-4 w-4 animate-spin" />}
-              Crear orden
+              {saving && <FlaskConical className="h-4 w-4 animate-flask-swirl" />}
+              {saving ? "Registrando orden…" : "Crear orden"}
             </Button>
           </CardContent>
         </Card>

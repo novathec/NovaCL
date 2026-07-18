@@ -49,6 +49,10 @@ export function Topbar({
 
   return (
     <header className="sticky top-0 z-30 flex h-14 items-center gap-3 border-b bg-card/80 px-4 backdrop-blur">
+      <span
+        aria-hidden
+        className="pointer-events-none absolute inset-x-0 -bottom-px h-px bg-linear-to-r from-transparent via-primary/50 to-transparent"
+      />
       <MobileNav sections={sections} />
 
       {/* Selector de organización (solo si hay más de una) */}
@@ -97,11 +101,12 @@ export function Topbar({
         <Button
           variant="ghost"
           size="icon"
+          className="group"
           onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
           aria-label="Cambiar tema"
         >
-          <Sun className="h-4 w-4 dark:hidden" />
-          <Moon className="hidden h-4 w-4 dark:block" />
+          <Sun className="h-4 w-4 transition-transform duration-300 group-hover:rotate-90 dark:hidden" />
+          <Moon className="hidden h-4 w-4 transition-transform duration-300 group-hover:-rotate-12 dark:block" />
         </Button>
 
         <DropdownMenu>

@@ -11,9 +11,9 @@ export const metadata = { title: "Nueva atención" };
 export default async function NuevaOrdenPage({
   searchParams,
 }: {
-  searchParams: Promise<{ patient?: string }>;
+  searchParams: Promise<{ patient?: string; cita?: string }>;
 }) {
-  const { patient } = await searchParams;
+  const { patient, cita } = await searchParams;
   const ctx = await getSessionContext();
   const supabase = await createClient();
   const orgId = ctx.activeOrgId!;
@@ -65,7 +65,7 @@ export default async function NuevaOrdenPage({
         title="Nueva atención"
         description={`Sede: ${ctx.sedes.find((s) => s.id === sedeId)?.nombre ?? "—"}`}
       />
-      <NewOrderForm studies={studyOptions} initialPatient={initialPatient ?? null} />
+      <NewOrderForm studies={studyOptions} initialPatient={initialPatient ?? null} citaId={cita ?? null} />
     </>
   );
 }

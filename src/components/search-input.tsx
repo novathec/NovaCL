@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
-import { useTransition } from "react";
+import { useEffect, useRef, useTransition } from "react";
 import { Search, Loader2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 
@@ -10,12 +10,23 @@ export function SearchInput({ placeholder = "Buscar..." }: { placeholder?: strin
   const pathname = usePathname();
   const params = useSearchParams();
   const [pending, startTransition] = useTransition();
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  useEffect(() => {
+    return () => {
+      if (timer.current) clearTimeout(timer.current);
+    };
+  }, []);
+
+  // Debounce: una sola consulta 300 ms después de dejar de escribir
   function onChange(value: string) {
-    const next = new URLSearchParams(params);
-    if (value) next.set("q", value);
-    else next.delete("q");
-    startTransition(() => router.replace(`${pathname}?${next.toString()}` as never));
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = setTimeout(() => {
+      const next = new URLSearchParams(params);
+      if (value) next.set("q", value);
+      else next.delete("q");
+      startTransition(() => router.replace(`${pathname}?${next.toString()}` as never));
+    }, 300);
   }
 
   return (

@@ -73,6 +73,14 @@ export type ResultFlag =
   | "critico_alto"
   | "anormal";
 
+export type AppointmentStatus =
+  | "programada"
+  | "confirmada"
+  | "en_espera"
+  | "atendida"
+  | "no_asistio"
+  | "cancelada";
+
 export type ValueType = "numerico" | "texto" | "opcion" | "titulo";
 export type Sex = "M" | "F" | "otro" | "desconocido";
 export type DeliveryChannel = "portal" | "email" | "sms" | "whatsapp" | "impreso";
@@ -376,6 +384,27 @@ export interface Database {
         detalle: Json | null;
         created_at: string;
       }>;
+      LIS_appointments: Table<{
+        id: string;
+        organization_id: string;
+        sede_id: string;
+        patient_id: string;
+        order_id: string | null;
+        fecha: string;
+        hora_inicio: string;
+        duracion_min: number;
+        status: AppointmentStatus;
+        motivo: string | null;
+        study_ids: string[];
+        medico_solicitante: string | null;
+        canal: string;
+        notas: string | null;
+        recordatorio_at: string | null;
+        cancel_motivo: string | null;
+        created_by: string | null;
+        created_at: string;
+        updated_at: string;
+      }>;
       LIS_audit_log: Table<{
         id: number;
         organization_id: string | null;
@@ -393,6 +422,34 @@ export interface Database {
       }>;
     };
     Views: {
+      v_agenda: {
+        Relationships: [];
+        Row: {
+          id: string;
+          organization_id: string;
+          sede_id: string;
+          patient_id: string;
+          order_id: string | null;
+          fecha: string;
+          hora_inicio: string;
+          duracion_min: number;
+          status: AppointmentStatus;
+          motivo: string | null;
+          study_ids: string[];
+          medico_solicitante: string | null;
+          canal: string;
+          notas: string | null;
+          created_at: string;
+          sede_nombre: string;
+          paciente: string;
+          tipo_documento: string;
+          numero_documento: string;
+          telefono: string | null;
+          sexo: Sex;
+          fecha_nacimiento: string | null;
+          order_codigo: string | null;
+        };
+      };
       v_order_overview: {
         Relationships: [];
         Row: {
@@ -449,6 +506,41 @@ export interface Database {
         Args: { p_order_id: string };
         Returns: Database["public"]["Tables"]["LIS_audit_log"]["Row"][];
       };
+      analytics_summary: {
+        Args: { p_desde: string; p_hasta: string; p_sede_id?: string | null };
+        Returns: Json;
+      };
+      analytics_daily: {
+        Args: { p_desde: string; p_hasta: string; p_sede_id?: string | null };
+        Returns: { dia: string; ordenes: number; ingresos: number; citas: number }[];
+      };
+      analytics_top_studies: {
+        Args: { p_desde: string; p_hasta: string; p_sede_id?: string | null; p_limit?: number };
+        Returns: { codigo: string; nombre: string; cantidad: number; ingresos: number }[];
+      };
+      analytics_by_category: {
+        Args: { p_desde: string; p_hasta: string; p_sede_id?: string | null };
+        Returns: { categoria: string; cantidad: number; ingresos: number }[];
+      };
+      analytics_order_status: {
+        Args: { p_desde: string; p_hasta: string; p_sede_id?: string | null };
+        Returns: { status: OrderStatus; cantidad: number }[];
+      };
+      analytics_by_sede: {
+        Args: { p_desde: string; p_hasta: string };
+        Returns: {
+          sede_id: string;
+          sede: string;
+          ordenes: number;
+          ingresos: number;
+          citas: number;
+          tat_horas: number;
+        }[];
+      };
+      analytics_billing: {
+        Args: { p_desde: string; p_hasta: string };
+        Returns: { status: InvoiceStatus; cantidad: number; monto: number }[];
+      };
     };
     Enums: {
       role: Role;
@@ -458,6 +550,7 @@ export interface Database {
       sample_status: SampleStatus;
       result_status: ResultStatus;
       result_flag: ResultFlag;
+      appointment_status: AppointmentStatus;
     };
     CompositeTypes: {
       [_ in never]: never;

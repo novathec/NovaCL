@@ -7,7 +7,7 @@ import { Menu, FlaskConical } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
-import type { NavSection } from "@/lib/nav";
+import { NAV_ICONS, type NavSection } from "@/lib/nav";
 
 export function MobileNav({ sections }: { sections: NavSection[] }) {
   const [open, setOpen] = useState(false);
@@ -33,7 +33,7 @@ export function MobileNav({ sections }: { sections: NavSection[] }) {
               <ul className="space-y-1">
                 {section.items.map((item) => {
                   const active = pathname.startsWith(item.href);
-                  const Icon = item.icon;
+                  const Icon = NAV_ICONS[item.icon];
                   return (
                     <li key={item.href}>
                       <Link

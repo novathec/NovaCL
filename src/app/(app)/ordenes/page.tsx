@@ -87,7 +87,7 @@ export default async function OrdenesPage({
                       <div className="flex items-center gap-2">
                         <div className="h-1.5 w-20 overflow-hidden rounded-full bg-muted">
                           <div
-                            className="h-full bg-primary"
+                            className="h-full bg-brand-gradient transition-all duration-500"
                             style={{
                               width: `${
                                 o.items_total ? (o.items_validados / o.items_total) * 100 : 0

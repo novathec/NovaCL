@@ -34,7 +34,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           user={{ email: ctx.user.email, nombre: ctx.profile?.nombre ?? "" }}
           roleLabel={roleLabel}
         />
-        <main className="flex-1 px-4 py-6 sm:px-6 lg:px-8">
+        <main className="flex-1 bg-tech-grid px-4 py-6 sm:px-6 lg:px-8">
           <div className="mx-auto w-full max-w-7xl">{children}</div>
         </main>
       </div>

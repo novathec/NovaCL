@@ -70,6 +70,31 @@ declare
   v_inv5 uuid;
   v_inv6 uuid;
   v_inv7 uuid;
+  -- historico para analitica y agenda
+  v_pats uuid[];
+  v_day int;
+  v_j int;
+  v_nord int;
+  v_ncitas int;
+  v_hist int := 0;
+  v_code_h text;
+  v_o_h uuid;
+  v_i_h uuid;
+  v_pat uuid;
+  v_kind int;
+  v_created timestamptz;
+  v_valid timestamptz;
+  v_estado_h app.order_status;
+  v_prio_h app.order_priority;
+  v_study_h uuid;
+  v_precio_h numeric;
+  v_snom_h text;
+  v_scod_h text;
+  v_val numeric;
+  v_flag_h app.result_flag;
+  v_sub_h numeric;
+  v_cstatus app.appointment_status;
+  v_canal_h text;
 begin
   select u.id, u.email
   into v_admin, v_admin_email
@@ -1070,6 +1095,250 @@ begin
      '{"demo":true,"operacion":"anular","estado":"anulada","motivo":"Orden duplicada"}'::jsonb,
      now() - interval '4 days');
 
+  -- ─────────────────────────────────────────────────────────────
+  -- Historico de ~90 dias: ordenes completadas/entregadas con
+  -- resultados validados y facturas. Alimenta el modulo Analitica
+  -- (series diarias, TAT, top de estudios, finanzas).
+  -- ─────────────────────────────────────────────────────────────
+  v_pats := array[v_p1, v_p2, v_p3, v_p4, v_p5, v_p6, v_p7];
+
+  for v_day in reverse 90..5 loop
+    -- volumen segun dia de semana: domingo cerrado, sabado reducido
+    v_nord := case extract(dow from (current_date - v_day))::int
+      when 0 then 0
+      when 6 then 1 + (v_day % 2)
+      else 2 + ((v_day * 7) % 3)
+    end;
+
+    for v_j in 1..v_nord loop
+      v_hist := v_hist + 1;
+      v_code_h := 'ORD-' || to_char(current_date - v_day, 'YYYY') || '-' || lpad((1000 + v_hist)::text, 6, '0');
+      v_pat := v_pats[1 + ((v_day + v_j * 3) % 7)];
+      v_kind := (v_day + v_j) % 4;  -- 0 hemograma, 1 glucosa, 2 lipidico, 3 pcr
+      v_created := ((current_date - v_day) + time '08:15')::timestamptz + (v_j * interval '52 minutes');
+      -- TAT variable: 3 a 24 horas hasta la validacion
+      v_valid := v_created + interval '3 hours' + (((v_day * 11 + v_j * 5) % 22)) * interval '1 hour';
+      v_estado_h := case when (v_day + v_j) % 3 = 0
+        then 'completada'::app.order_status else 'entregada'::app.order_status end;
+      v_prio_h := case when (v_day + v_j) % 9 = 0
+        then 'urgente'::app.order_priority else 'rutina'::app.order_priority end;
+
+      if v_kind = 0 then
+        v_study_h := v_st_hem;    v_precio_h := 45.00; v_snom_h := 'Hemograma automatizado';          v_scod_h := 'NOVA-HEMOG';
+      elsif v_kind = 1 then
+        v_study_h := v_st_glu;    v_precio_h := 20.00; v_snom_h := 'Glucosa en ayunas';               v_scod_h := 'NOVA-GLUCO';
+      elsif v_kind = 2 then
+        v_study_h := v_st_lipid;  v_precio_h := 85.00; v_snom_h := 'Perfil lipídico completo';        v_scod_h := 'NOVA-PLIP';
+      else
+        v_study_h := v_st_crp;    v_precio_h := 50.00; v_snom_h := 'Proteína C Reactiva cuantitativa'; v_scod_h := 'NOVA-PCR';
+      end if;
+
+      insert into public."LIS_orders" (
+        id, organization_id, sede_id, patient_id, codigo, status, prioridad,
+        medico_solicitante, diagnostico, observaciones, moneda, total, created_by,
+        created_at, updated_at
+      ) values (
+        gen_random_uuid(), v_org, v_sede, v_pat, v_code_h, 'registrada', v_prio_h,
+        'Dra. Valeria Campos CMP 84521', 'Atención demostrativa (histórico)',
+        null, 'PEN', 0, v_admin, v_created, v_valid
+      ) returning id into v_o_h;
+
+      insert into public."LIS_order_items" (
+        id, order_id, study_id, status, precio, descuento, study_nombre, study_codigo, created_at, updated_at
+      ) values (
+        gen_random_uuid(), v_o_h, v_study_h, 'validado', v_precio_h, 0.00,
+        v_snom_h, v_scod_h, v_created, v_valid
+      ) returning id into v_i_h;
+
+      if v_kind = 0 then
+        v_val := round(11.5 + ((v_hist * 7) % 50) / 10.0, 1);
+        insert into public."LIS_results" (
+          id, organization_id, order_item_id, analyte_id, analyte_nombre, analyte_unidad,
+          valor_num, valor_texto, flag, rango_texto, status, metodo, ingresado_por,
+          ingresado_at, validado_por, validado_at, nota, created_at, updated_at
+        ) values
+          (gen_random_uuid(), v_org, v_i_h, v_a_hb, 'Hemoglobina', 'g/dL',
+           v_val, v_val::text,
+           case when v_val < 13.5 then 'bajo'::app.result_flag else 'normal'::app.result_flag end,
+           '13.5 - 17.5 g/dL', 'validado',
+           'Fotometría de cianometahemoglobina', v_admin, v_valid - interval '1 hour',
+           v_admin, v_valid, null, v_valid - interval '1 hour', v_valid),
+          (gen_random_uuid(), v_org, v_i_h, v_a_wbc, 'Leucocitos', '10^3/uL',
+           round(4.5 + ((v_hist * 3) % 70) / 10.0, 1), (round(4.5 + ((v_hist * 3) % 70) / 10.0, 1))::text,
+           case when round(4.5 + ((v_hist * 3) % 70) / 10.0, 1) > 11.0 then 'alto'::app.result_flag else 'normal'::app.result_flag end,
+           '4.0 - 11.0 10^3/uL', 'validado', 'Citometría de flujo', v_admin, v_valid - interval '1 hour',
+           v_admin, v_valid, null, v_valid - interval '1 hour', v_valid),
+          (gen_random_uuid(), v_org, v_i_h, v_a_plt, 'Plaquetas', '10^3/uL',
+           160 + ((v_hist * 13) % 240), (160 + ((v_hist * 13) % 240))::text, 'normal',
+           '150 - 450 10^3/uL', 'validado', 'Impedancia eléctrica', v_admin, v_valid - interval '1 hour',
+           v_admin, v_valid, null, v_valid - interval '1 hour', v_valid);
+      elsif v_kind = 1 then
+        if v_hist % 29 = 0 then v_val := 348; v_flag_h := 'critico_alto';
+        else
+          v_val := 72 + ((v_hist * 5) % 55);
+          v_flag_h := case when v_val > 100 then 'alto'::app.result_flag else 'normal'::app.result_flag end;
+        end if;
+        insert into public."LIS_results" (
+          id, organization_id, order_item_id, analyte_id, analyte_nombre, analyte_unidad,
+          valor_num, valor_texto, flag, rango_texto, status, metodo, ingresado_por,
+          ingresado_at, validado_por, validado_at, nota, created_at, updated_at
+        ) values (
+          gen_random_uuid(), v_org, v_i_h, v_a_glu, 'Glucosa', 'mg/dL',
+          v_val, v_val::text, v_flag_h, '70 - 100 mg/dL', 'validado', 'Hexoquinasa',
+          v_admin, v_valid - interval '1 hour', v_admin, v_valid,
+          case when v_flag_h = 'critico_alto' then 'Valor crítico comunicado al médico solicitante.' end,
+          v_valid - interval '1 hour', v_valid);
+      elsif v_kind = 2 then
+        v_val := 150 + ((v_hist * 11) % 110);
+        insert into public."LIS_results" (
+          id, organization_id, order_item_id, analyte_id, analyte_nombre, analyte_unidad,
+          valor_num, valor_texto, flag, rango_texto, status, metodo, ingresado_por,
+          ingresado_at, validado_por, validado_at, nota, created_at, updated_at
+        ) values
+          (gen_random_uuid(), v_org, v_i_h, v_a_ct, 'Colesterol total', 'mg/dL',
+           v_val, v_val::text,
+           case when v_val >= 200 then 'alto'::app.result_flag else 'normal'::app.result_flag end,
+           'Deseable: menor de 200 mg/dL', 'validado', 'Enzimático colorimétrico', v_admin,
+           v_valid - interval '1 hour', v_admin, v_valid, null, v_valid - interval '1 hour', v_valid),
+          (gen_random_uuid(), v_org, v_i_h, v_a_hdl, 'Colesterol HDL', 'mg/dL',
+           35 + ((v_hist * 3) % 40), (35 + ((v_hist * 3) % 40))::text,
+           case when 35 + ((v_hist * 3) % 40) < 40 then 'bajo'::app.result_flag else 'normal'::app.result_flag end,
+           '40 - 90 mg/dL', 'validado', 'Enzimático homogéneo', v_admin, v_valid - interval '1 hour',
+           v_admin, v_valid, null, v_valid - interval '1 hour', v_valid),
+          (gen_random_uuid(), v_org, v_i_h, v_a_tg, 'Triglicéridos', 'mg/dL',
+           90 + ((v_hist * 17) % 160), (90 + ((v_hist * 17) % 160))::text,
+           case when 90 + ((v_hist * 17) % 160) >= 150 then 'alto'::app.result_flag else 'normal'::app.result_flag end,
+           '30 - 149 mg/dL', 'validado', 'Glicerol fosfato oxidasa', v_admin, v_valid - interval '1 hour',
+           v_admin, v_valid, null, v_valid - interval '1 hour', v_valid);
+      else
+        if v_hist % 31 = 0 then v_val := 96.0; v_flag_h := 'alto';
+        else
+          v_val := round(((v_hist * 9) % 48) / 10.0, 1);
+          v_flag_h := case when v_val > 5 then 'alto'::app.result_flag else 'normal'::app.result_flag end;
+        end if;
+        insert into public."LIS_results" (
+          id, organization_id, order_item_id, analyte_id, analyte_nombre, analyte_unidad,
+          valor_num, valor_texto, flag, rango_texto, status, metodo, ingresado_por,
+          ingresado_at, validado_por, validado_at, nota, created_at, updated_at
+        ) values (
+          gen_random_uuid(), v_org, v_i_h, v_a_crp, 'Proteína C Reactiva', 'mg/L',
+          v_val, v_val::text, v_flag_h, '0.0 - 5.0 mg/L', 'validado', 'Inmunoturbidimetría',
+          v_admin, v_valid - interval '1 hour', v_admin, v_valid, null,
+          v_valid - interval '1 hour', v_valid);
+      end if;
+
+      update public."LIS_orders"
+      set status = v_estado_h, updated_at = v_valid
+      where id = v_o_h;
+
+      -- Facturacion del historico: 1 de cada 3 pagada, 1 de cada 7 emitida
+      if v_hist % 3 = 0 or v_hist % 7 = 0 then
+        v_sub_h := round(v_precio_h / 1.18, 2);
+        insert into public."LIS_invoices" (
+          id, organization_id, order_id, provider, external_id, serie, numero, status,
+          moneda, subtotal, impuestos, total, pdf_url, xml_url, payload, created_at, updated_at
+        ) values (
+          gen_random_uuid(), v_org, v_o_h, 'wally', 'WALLY-DEMO-H' || lpad(v_hist::text, 5, '0'),
+          'B001', lpad((100 + v_hist)::text, 6, '0'),
+          case when v_hist % 3 = 0 then 'pagada'::app.invoice_status else 'emitida'::app.invoice_status end,
+          'PEN', v_sub_h, v_precio_h - v_sub_h, v_precio_h,
+          null, null, '{"demo":true,"historico":true}'::jsonb, v_valid, v_valid
+        );
+      end if;
+    end loop;
+  end loop;
+
+  insert into public."LIS_order_counters" (organization_id, last_number)
+  values (v_org, 1000 + v_hist)
+  on conflict (organization_id) do update set
+    last_number = greatest(public."LIS_order_counters".last_number, excluded.last_number);
+
+  -- ─────────────────────────────────────────────────────────────
+  -- Agenda: citas historicas (30 dias) para las metricas de
+  -- asistencia + citas de hoy y proximas para operar el modulo
+  -- ─────────────────────────────────────────────────────────────
+  for v_day in reverse 30..1 loop
+    if extract(dow from (current_date - v_day))::int <> 0 then
+      v_ncitas := 2 + ((v_day * 5) % 3);
+      for v_j in 1..v_ncitas loop
+        v_cstatus := case
+          when (v_day + v_j) % 8 = 0 then 'no_asistio'::app.appointment_status
+          when (v_day + v_j) % 11 = 0 then 'cancelada'::app.appointment_status
+          else 'atendida'::app.appointment_status
+        end;
+        v_canal_h := (array['presencial','telefono','whatsapp','web'])[1 + ((v_day + v_j) % 4)];
+        insert into public."LIS_appointments" (
+          id, organization_id, sede_id, patient_id, fecha, hora_inicio, duracion_min,
+          status, motivo, study_ids, canal, cancel_motivo, created_by, created_at, updated_at
+        ) values (
+          gen_random_uuid(), v_org, v_sede, v_pats[1 + ((v_day * 2 + v_j) % 7)],
+          current_date - v_day, time '08:30' + (v_j * interval '45 minutes'),
+          15, v_cstatus, 'Toma de muestra programada',
+          case (v_day + v_j) % 4
+            when 0 then array[v_st_hem]
+            when 1 then array[v_st_glu]
+            when 2 then array[v_st_lipid]
+            else array[v_st_crp]
+          end,
+          v_canal_h,
+          case when v_cstatus = 'cancelada' then 'Reprogramación solicitada por el paciente.' end,
+          v_admin,
+          ((current_date - v_day - 2) + time '10:00')::timestamptz,
+          ((current_date - v_day) + time '18:00')::timestamptz
+        );
+      end loop;
+    end if;
+  end loop;
+
+  -- Citas de hoy: una ya atendida (enlazada a la orden registrada),
+  -- una en espera, una confirmada y dos programadas
+  insert into public."LIS_appointments" (
+    id, organization_id, sede_id, patient_id, order_id, fecha, hora_inicio, duracion_min,
+    status, motivo, study_ids, medico_solicitante, canal, notas, created_by, created_at, updated_at
+  ) values
+    (gen_random_uuid(), v_org, v_sede, v_p1, v_o1, current_date, '07:40', 15,
+     'atendida', 'Chequeo preventivo anual', array[v_st_hem],
+     'Dra. Valeria Campos CMP 84521', 'presencial', 'Check-in realizado en recepción.',
+     v_admin, now() - interval '3 days', now() - interval '20 minutes'),
+    (gen_random_uuid(), v_org, v_sede, v_p5, null, current_date, '08:45', 20,
+     'en_espera', 'Control de dislipidemia', array[v_st_lipid],
+     'Dra. Valeria Campos CMP 84521', 'telefono', 'Paciente en sala de espera; ayuno confirmado.',
+     v_admin, now() - interval '2 days', now() - interval '10 minutes'),
+    (gen_random_uuid(), v_org, v_sede, v_p2, null, current_date, '10:30', 15,
+     'confirmada', 'Control de glucosa', array[v_st_glu],
+     'Dr. Martín Reyes CMP 71204', 'whatsapp', 'Confirmó por WhatsApp; recordar ayuno de 8 horas.',
+     v_admin, now() - interval '2 days', now() - interval '1 hour'),
+    (gen_random_uuid(), v_org, v_sede, v_p3, null, current_date, '12:00', 15,
+     'programada', 'Control de PCR post tratamiento', array[v_st_crp],
+     'Dra. Camila Núñez CMP 80117', 'web', null,
+     v_admin, now() - interval '1 day', now() - interval '1 day'),
+    (gen_random_uuid(), v_org, v_sede, v_p7, null, current_date, '16:15', 15,
+     'programada', 'Perfil lipídico de control', array[v_st_lipid],
+     null, 'presencial', 'Prefiere atención por la tarde.',
+     v_admin, now() - interval '6 hours', now() - interval '6 hours');
+
+  -- Citas proximas (siguientes dias)
+  insert into public."LIS_appointments" (
+    id, organization_id, sede_id, patient_id, fecha, hora_inicio, duracion_min,
+    status, motivo, study_ids, medico_solicitante, canal, notas, created_by, created_at, updated_at
+  ) values
+    (gen_random_uuid(), v_org, v_sede, v_p4, current_date + 1, '08:30', 20,
+     'confirmada', 'Perfil lipídico y glucosa de control', array[v_st_lipid, v_st_glu],
+     'Dr. Renato Vargas CMP 66510', 'telefono', 'Ayuno de 10 a 12 horas indicado.',
+     v_admin, now() - interval '1 day', now() - interval '2 hours'),
+    (gen_random_uuid(), v_org, v_sede, v_p6, current_date + 1, '10:15', 15,
+     'programada', 'Hemograma de control pediátrico', array[v_st_hem],
+     'Dr. Álvaro Peña CMP 59021', 'presencial', 'Acude con apoderado.',
+     v_admin, now() - interval '5 hours', now() - interval '5 hours'),
+    (gen_random_uuid(), v_org, v_sede, v_p5, current_date + 2, '09:00', 15,
+     'programada', 'Glucosa en ayunas de control', array[v_st_glu],
+     'Dra. Valeria Campos CMP 84521', 'whatsapp', null,
+     v_admin, now() - interval '4 hours', now() - interval '4 hours'),
+    (gen_random_uuid(), v_org, v_sede, v_p2, current_date + 3, '08:45', 15,
+     'programada', 'Evaluación por definir con el médico', array[]::uuid[],
+     null, 'web', 'Sin estudios preseleccionados: el check-in deriva a nueva orden.',
+     v_admin, now() - interval '2 hours', now() - interval '2 hours');
+
   update public."LIS_audit_log"
   set sede_id = coalesce(sede_id, v_sede),
       actor_id = coalesce(actor_id, v_admin),
@@ -1115,7 +1384,7 @@ begin
     now()
   );
 
-  raise notice 'Seed Nova Clinic completado para el usuario % y la sede %.', v_admin_email, v_sede;
+  raise notice 'Seed Nova Clinic completado para el usuario % y la sede %: % ordenes historicas, agenda con citas de 30 dias + hoy y proximas.', v_admin_email, v_sede, v_hist;
 end
 $$;
 

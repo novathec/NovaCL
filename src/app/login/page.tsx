@@ -8,12 +8,20 @@ export default function LoginPage() {
   return (
     <div className="grid min-h-screen lg:grid-cols-2">
       {/* Panel de marca */}
-      <div className="relative hidden flex-col justify-between bg-primary p-12 text-primary-foreground lg:flex">
-        <div className="flex items-center gap-2 text-lg font-semibold">
+      <div className="relative hidden flex-col justify-between overflow-hidden bg-brand-gradient p-12 text-primary-foreground lg:flex">
+        <div
+          aria-hidden
+          className="pointer-events-none absolute -top-24 -right-24 h-80 w-80 rounded-full bg-white/10 blur-3xl"
+        />
+        <div
+          aria-hidden
+          className="pointer-events-none absolute -bottom-32 -left-16 h-96 w-96 rounded-full bg-white/10 blur-3xl"
+        />
+        <div className="relative flex items-center gap-2 text-lg font-semibold animate-fade-in">
           <FlaskConical className="h-6 w-6" />
           Nova Lab
         </div>
-        <div className="space-y-4">
+        <div className="relative space-y-4 animate-fade-up">
           <h1 className="text-3xl font-bold leading-tight">
             Sistema de información
             <br /> de laboratorio clínico
@@ -23,14 +31,14 @@ export default function LoginPage() {
             trazabilidad completa. Diseñado para escalar entre clínicas.
           </p>
         </div>
-        <p className="text-sm text-primary-foreground/70">
+        <p className="relative text-sm text-primary-foreground/70">
           © {new Date().getFullYear()} Nova Lab · Multi-sede · RBAC · Trazabilidad
         </p>
       </div>
 
       {/* Formulario */}
       <div className="flex items-center justify-center p-6">
-        <div className="w-full max-w-sm space-y-6">
+        <div className="w-full max-w-sm space-y-6 animate-fade-up">
           <div className="space-y-2 text-center lg:hidden">
             <div className="flex items-center justify-center gap-2 text-lg font-semibold">
               <FlaskConical className="h-6 w-6 text-primary" />
