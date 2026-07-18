@@ -94,6 +94,8 @@ export async function saveBillingAction(_prev: unknown, formData: FormData) {
   const enabled = formData.get("enabled") === "on";
   const serie = String(formData.get("serie") ?? "").trim();
   const igv = Number(formData.get("igv") ?? 0.18);
+  const autoInvoice = formData.get("auto_invoice") === "on";
+  const autoDeliver = formData.get("auto_deliver") === "on";
 
   const supabase = await createClient();
   const { error } = await supabase
@@ -103,7 +105,12 @@ export async function saveBillingAction(_prev: unknown, formData: FormData) {
         organization_id: ctx.activeOrgId!,
         provider,
         enabled,
-        config: { serie: serie || "B001", igv },
+        config: {
+          serie: serie || "B001",
+          igv,
+          auto_invoice: autoInvoice,
+          auto_deliver: autoDeliver,
+        },
       },
       { onConflict: "organization_id,provider" }
     );

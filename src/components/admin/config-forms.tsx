@@ -165,11 +165,15 @@ export function BillingForm({
   enabled,
   serie,
   igv,
+  autoInvoice,
+  autoDeliver,
 }: {
   provider: string;
   enabled: boolean;
   serie: string;
   igv: number;
+  autoInvoice: boolean;
+  autoDeliver: boolean;
 }) {
   const [state, action] = useActionState(saveBillingAction, undefined);
   useToastAction(state, "Configuración guardada");
@@ -201,6 +205,23 @@ export function BillingForm({
         <input type="checkbox" name="enabled" defaultChecked={enabled} className="h-4 w-4" />
         Integración habilitada
       </label>
+
+      <div className="space-y-2 rounded-lg border p-3">
+        <p className="text-sm font-medium">Automatización al completar una orden</p>
+        <label className="flex items-center gap-2 text-sm">
+          <input type="checkbox" name="auto_invoice" defaultChecked={autoInvoice} className="h-4 w-4" />
+          Emitir comprobante automáticamente
+        </label>
+        <label className="flex items-center gap-2 text-sm">
+          <input type="checkbox" name="auto_deliver" defaultChecked={autoDeliver} className="h-4 w-4" />
+          Enviar resultados al paciente automáticamente
+        </label>
+        <p className="text-xs text-muted-foreground">
+          El informe PDF siempre se archiva en el repositorio al validar; estos
+          toggles encadenan además la factura y la entrega sin intervención manual.
+        </p>
+      </div>
+
       <p className="text-xs text-muted-foreground">
         Las credenciales (API key) se toman de variables de entorno del servidor
         (WALLY_API_KEY). Sin credenciales, la emisión funciona en modo simulación.

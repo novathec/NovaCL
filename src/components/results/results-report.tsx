@@ -16,6 +16,8 @@ export type ReportStudy = { nombre: string; analytes: ReportAnalyte[] };
 export type ReportData = {
   organizacion: string;
   sede: string;
+  /** true si el reporte incluye resultados aún no validados. */
+  preliminar: boolean;
   codigo: string;
   fecha: string;
   paciente: string;

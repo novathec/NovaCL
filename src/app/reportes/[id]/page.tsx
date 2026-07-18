@@ -24,7 +24,19 @@ export default async function ReportePage({
   if (!report) notFound();
 
   return (
-    <div className="min-h-screen bg-muted/30 print:bg-white">
+    <div className="relative min-h-screen bg-muted/30 print:bg-white">
+      {/* Marca de agua para reportes con resultados sin validar */}
+      {report.preliminar && (
+        <div
+          aria-hidden
+          className="pointer-events-none fixed inset-0 z-20 flex select-none items-center justify-center print:absolute"
+        >
+          <p className="rotate-[-30deg] text-[16vw] font-black uppercase tracking-widest text-red-600/10 print:text-[8rem] print:text-red-600/15">
+            Preliminar
+          </p>
+        </div>
+      )}
+
       {/* Barra de acciones (no se imprime) */}
       <div className="no-print sticky top-0 z-10 border-b bg-card">
         <div className="mx-auto flex max-w-4xl items-center justify-between px-6 py-3">
@@ -33,7 +45,14 @@ export default async function ReportePage({
               <ArrowLeft className="h-4 w-4" /> Volver a la orden
             </Link>
           </Button>
-          <PrintButton />
+          <div className="flex items-center gap-3">
+            {report.preliminar && (
+              <span className="rounded-full bg-red-100 px-3 py-1 text-xs font-semibold text-red-700 dark:bg-red-950 dark:text-red-300">
+                PRELIMINAR — contiene resultados sin validar
+              </span>
+            )}
+            <PrintButton />
+          </div>
         </div>
       </div>
 

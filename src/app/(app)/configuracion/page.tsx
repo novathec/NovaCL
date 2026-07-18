@@ -25,7 +25,13 @@ export default async function ConfiguracionPage() {
     supabase.from("LIS_billing_integrations").select("*").eq("organization_id", orgId).maybeSingle(),
   ]);
 
-  const billingConfig = (billing?.config as { serie?: string; igv?: number }) ?? {};
+  const billingConfig =
+    (billing?.config as {
+      serie?: string;
+      igv?: number;
+      auto_invoice?: boolean;
+      auto_deliver?: boolean;
+    }) ?? {};
 
   return (
     <>
@@ -153,6 +159,8 @@ export default async function ConfiguracionPage() {
                 enabled={billing?.enabled ?? false}
                 serie={billingConfig.serie ?? "B001"}
                 igv={billingConfig.igv ?? 0.18}
+                autoInvoice={billingConfig.auto_invoice === true}
+                autoDeliver={billingConfig.auto_deliver === true}
               />
             </CardContent>
           </Card>

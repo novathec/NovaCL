@@ -3,13 +3,26 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Save, ShieldCheck, Loader2 } from "lucide-react";
+import { Save, ShieldCheck, Loader2, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { saveResultsAction, validateResultsAction, type ResultInput } from "@/lib/actions/results";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  saveResultsAction,
+  validateResultsAction,
+  type CriticalValue,
+  type ResultInput,
+} from "@/lib/actions/results";
+import type { FinalizeSummary } from "@/lib/automation";
 import { FLAG_LABELS, FLAG_COLORS, ITEM_STATUS_LABELS } from "@/lib/constants";
 import { cn } from "@/lib/utils";
 import type { ItemStatus, ResultFlag, ResultStatus } from "@/lib/database.types";
@@ -45,6 +58,7 @@ export function ResultsEntry({
 }) {
   const router = useRouter();
   const [pending, start] = useTransition();
+  const [criticos, setCriticos] = useState<CriticalValue[]>([]);
   const [values, setValues] = useState<Record<string, string>>(() => {
     const init: Record<string, string> = {};
     for (const g of groups) {
@@ -91,6 +105,25 @@ export function ResultsEntry({
         return;
       }
       toast.success(validate ? "Resultados validados" : "Resultados guardados");
+
+      // Alerta activa de valores críticos: requiere confirmación explícita.
+      if (res.criticos && res.criticos.length > 0) setCriticos(res.criticos);
+
+      // Efectos de la automatización al completar la orden
+      const auto = ("automation" in res ? res.automation : undefined) as
+        | FinalizeSummary
+        | undefined;
+      if (auto?.reportVersion) {
+        toast.success(`Informe v${auto.reportVersion} archivado en el repositorio`);
+      }
+      if (auto?.reportError) {
+        toast.warning(`Informe no archivado: ${auto.reportError}`);
+      }
+      if (auto?.invoice === "emitida") toast.success("Comprobante emitido automáticamente");
+      if (auto?.invoice === "error") toast.warning("La auto-facturación falló; emite manualmente desde Facturación");
+      if (auto?.delivery === "enviada") toast.success("Resultados enviados al paciente");
+      if (auto?.delivery === "error") toast.warning("La auto-entrega falló; envía manualmente desde Entrega");
+
       router.refresh();
     });
   }
@@ -184,6 +217,38 @@ export function ResultsEntry({
           </Button>
         )}
       </div>
+
+      {/* Alerta bloqueante de valores críticos */}
+      <Dialog open={criticos.length > 0} onOpenChange={(o) => !o && setCriticos([])}>
+        <DialogContent className="max-w-md border-red-300 dark:border-red-900">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-red-600 dark:text-red-400">
+              <AlertTriangle className="h-5 w-5 animate-pulse-glow rounded-full" />
+              Valores críticos detectados
+            </DialogTitle>
+          </DialogHeader>
+          <ul className="space-y-2">
+            {criticos.map((c, i) => (
+              <li
+                key={i}
+                className="flex items-center justify-between rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm dark:border-red-900 dark:bg-red-950/40"
+              >
+                <span className="font-medium">{c.analito}</span>
+                <span className="font-mono text-red-700 dark:text-red-300">{c.valor}</span>
+              </li>
+            ))}
+          </ul>
+          <p className="text-sm text-muted-foreground">
+            El protocolo de valores críticos exige comunicar estos resultados al médico
+            solicitante de inmediato y dejar constancia en la nota del resultado.
+          </p>
+          <DialogFooter>
+            <Button variant="destructive" onClick={() => setCriticos([])}>
+              Entendido, notificaré al médico
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

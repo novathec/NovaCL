@@ -71,6 +71,9 @@ export async function buildOrderReport(
   return {
     organizacion: (order.organizations as unknown as { nombre: string }).nombre,
     sede: (order.sedes as unknown as { nombre: string }).nombre,
+    // Con borradores incluidos, marca el reporte como preliminar si algún
+    // resultado impreso aún no está validado.
+    preliminar: !onlyValidated && results.some((r) => r.status !== "validado"),
     codigo: order.codigo,
     fecha: order.created_at,
     paciente: `${patient.nombres} ${patient.apellidos}`,

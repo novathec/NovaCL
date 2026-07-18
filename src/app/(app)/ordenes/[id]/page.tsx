@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft, User, Stethoscope, Calendar, FlaskConical, Printer } from "lucide-react";
 import { getSessionContext } from "@/lib/auth/session";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, createAdminClient } from "@/lib/supabase/server";
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -47,19 +47,39 @@ export default async function OrderDetailPage({
     email: string | null;
   };
 
-  const [{ data: items }, { data: samples }, { data: timeline }] = await Promise.all([
-    supabase
-      .from("LIS_order_items")
-      .select("*")
-      .eq("order_id", id)
-      .order("created_at"),
-    supabase
-      .from("LIS_samples")
-      .select("*, specimen_types:LIS_specimen_types(nombre)")
-      .eq("order_id", id)
-      .order("created_at"),
-    supabase.rpc("order_timeline", { p_order_id: id }),
-  ]);
+  const [{ data: items }, { data: samples }, { data: timeline }, { data: reportDocs }] =
+    await Promise.all([
+      supabase
+        .from("LIS_order_items")
+        .select("*")
+        .eq("order_id", id)
+        .order("created_at"),
+      supabase
+        .from("LIS_samples")
+        .select("*, specimen_types:LIS_specimen_types(nombre)")
+        .eq("order_id", id)
+        .order("created_at"),
+      supabase.rpc("order_timeline", { p_order_id: id }),
+      supabase
+        .from("LIS_report_documents")
+        .select("id, version, storage_path, created_at")
+        .eq("order_id", id)
+        .order("version", { ascending: false }),
+    ]);
+
+  // Signed URLs (1 h) para descargar los informes archivados en Storage.
+  // El acceso ya está autorizado: la fila de LIS_report_documents pasó RLS.
+  const admin = createAdminClient();
+  const informes = await Promise.all(
+    (reportDocs ?? [])
+      .filter((d) => d.storage_path)
+      .map(async (d) => {
+        const { data } = await admin.storage
+          .from("reports")
+          .createSignedUrl(d.storage_path!, 3600);
+        return { ...d, url: data?.signedUrl ?? null };
+      })
+  );
 
   const meta = [
     { icon: User, label: "Paciente", value: `${patient.nombres} ${patient.apellidos}`, sub: `${patient.tipo_documento} ${patient.numero_documento} · ${calcAge(patient.fecha_nacimiento)}`, href: `/pacientes/${patient.id}` },
@@ -108,6 +128,26 @@ export default async function OrderDetailPage({
           </Card>
         ))}
       </div>
+
+      {informes.length > 0 && (
+        <Card className="mb-6 animate-fade-in">
+          <CardContent className="flex flex-wrap items-center gap-3 p-4">
+            <div className="flex items-center gap-2 text-sm font-medium">
+              <FlaskConical className="h-4 w-4 text-primary" /> Informes archivados
+            </div>
+            {informes.map((doc) => (
+              <Button key={doc.id} asChild size="sm" variant="outline" disabled={!doc.url}>
+                <a href={doc.url ?? "#"} target="_blank" rel="noreferrer">
+                  <Printer className="h-4 w-4" /> v{doc.version} · {formatDate(doc.created_at, true)}
+                </a>
+              </Button>
+            ))}
+            <p className="w-full text-xs text-muted-foreground sm:w-auto">
+              PDF inmutables generados al validar. Los enlaces expiran en 1 hora.
+            </p>
+          </CardContent>
+        </Card>
+      )}
 
       <Tabs defaultValue="estudios">
         <TabsList>
