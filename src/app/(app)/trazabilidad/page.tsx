@@ -1,4 +1,5 @@
 import { requireRole } from "@/lib/auth/session";
+import { requireModuleAccess } from "@/lib/auth/guard";
 import { createClient } from "@/lib/supabase/server";
 import { PageHeader } from "@/components/page-header";
 import { Card, CardContent } from "@/components/ui/card";
@@ -27,6 +28,7 @@ const ACTION_COLOR: Record<string, string> = {
 
 export default async function TrazabilidadPage() {
   const ctx = await requireRole(["org_admin", "sede_admin", "lectura"]);
+  await requireModuleAccess("trazabilidad");
   const supabase = await createClient();
 
   const { data: logs } = await supabase

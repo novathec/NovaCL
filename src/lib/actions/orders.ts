@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
-import { getSessionContext } from "@/lib/auth/session";
+import { getSessionContext, hasRole } from "@/lib/auth/session";
 import { generateBarcode } from "@/lib/utils";
 import type { OrderPriority, Database } from "@/lib/database.types";
 
@@ -113,4 +113,91 @@ export async function marcarEntregadaAction(orderId: string) {
   if (error) return { error: error.message };
   revalidatePath(`/ordenes/${orderId}`);
   return { ok: true };
+}
+
+/**
+ * Add-on test: agrega un estudio a una orden EXISTENTE (el médico pide un
+ * examen adicional con la misma muestra). Toma el precio vigente (de sede o
+ * base), evita duplicados y verifica si la orden ya tiene una muestra del
+ * tipo que el estudio requiere; si no, lo advierte para programar nueva toma.
+ */
+export async function addStudyToOrderAction(orderId: string, studyId: string) {
+  const ctx = await getSessionContext();
+  if (!hasRole(ctx.roles, ["org_admin", "sede_admin", "recepcion"])) {
+    return { error: "No autorizado para modificar la orden." };
+  }
+  const supabase = await createClient();
+
+  const { data: order } = await supabase
+    .from("LIS_orders")
+    .select("id, status, sede_id, organization_id")
+    .eq("id", orderId)
+    .maybeSingle();
+  if (!order) return { error: "Orden no encontrada." };
+  if (["entregada", "anulada"].includes(order.status)) {
+    return { error: "No se pueden agregar estudios a una orden entregada o anulada." };
+  }
+
+  const { data: study } = await supabase
+    .from("LIS_studies")
+    .select("id, codigo, nombre, specimen_type_id, specimen_types:LIS_specimen_types(nombre)")
+    .eq("id", studyId)
+    .maybeSingle();
+  if (!study) return { error: "Estudio no encontrado." };
+
+  const { data: existing } = await supabase
+    .from("LIS_order_items")
+    .select("id")
+    .eq("order_id", orderId)
+    .eq("study_id", studyId)
+    .neq("status", "anulado")
+    .limit(1);
+  if (existing && existing.length > 0) {
+    return { error: "La orden ya incluye este estudio." };
+  }
+
+  // Precio vigente: primero el específico de la sede, luego el base
+  const { data: prices } = await supabase
+    .from("LIS_study_prices")
+    .select("precio, sede_id")
+    .eq("study_id", studyId)
+    .eq("activo", true)
+    .or(`sede_id.eq.${order.sede_id},sede_id.is.null`)
+    .order("vigente_desde", { ascending: false });
+  const precio =
+    prices?.find((p) => p.sede_id === order.sede_id)?.precio ??
+    prices?.find((p) => p.sede_id === null)?.precio ??
+    0;
+
+  const { error } = await supabase.from("LIS_order_items").insert({
+    order_id: orderId,
+    study_id: studyId,
+    status: "pendiente",
+    precio,
+    descuento: 0,
+    study_nombre: study.nombre,
+    study_codigo: study.codigo,
+  });
+  if (error) return { error: error.message };
+
+  // Compatibilidad de tubo: ¿ya existe una muestra utilizable del tipo requerido?
+  let warning: string | undefined;
+  if (study.specimen_type_id) {
+    const { data: muestras } = await supabase
+      .from("LIS_samples")
+      .select("id")
+      .eq("order_id", orderId)
+      .eq("specimen_type_id", study.specimen_type_id)
+      .neq("status", "rechazada")
+      .limit(1);
+    if (!muestras || muestras.length === 0) {
+      const tipo =
+        (study.specimen_types as unknown as { nombre: string } | null)?.nombre ?? "muestra";
+      warning = `La orden no tiene ${tipo.toLowerCase()} utilizable: programa una nueva toma.`;
+    }
+  }
+
+  revalidatePath(`/ordenes/${orderId}`);
+  revalidatePath("/ordenes");
+  return { ok: true, precio, warning };
 }

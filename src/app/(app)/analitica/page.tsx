@@ -1,5 +1,6 @@
 import { format, subDays } from "date-fns";
 import { getSessionContext } from "@/lib/auth/session";
+import { requireModuleAccess } from "@/lib/auth/guard";
 import { createClient } from "@/lib/supabase/server";
 import { AnalyticsClient, type AnalyticsData } from "@/components/analytics/analytics-client";
 
@@ -14,6 +15,7 @@ export default async function AnaliticaPage({
 }) {
   const params = await searchParams;
   const ctx = await getSessionContext();
+  await requireModuleAccess("analitica");
   const supabase = await createClient();
 
   const rango = RANGOS.has(params.rango ?? "") ? params.rango! : "30";

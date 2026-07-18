@@ -11,6 +11,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { OrderStatusBadge, PriorityBadge } from "@/components/status-badge";
 import { OrderActions } from "@/components/orders/order-actions";
+import { AddStudyDialog } from "@/components/orders/add-study-dialog";
 import { SamplesPanel } from "@/components/orders/samples-panel";
 import { OrderTimeline } from "@/components/orders/order-timeline";
 import { ITEM_STATUS_LABELS, SAMPLE_STATUS_LABELS } from "@/lib/constants";
@@ -67,6 +68,19 @@ export default async function OrderDetailPage({
         .order("version", { ascending: false }),
     ]);
 
+  // Catálogo para add-on tests (solo si la orden aún admite agregados)
+  const canAddStudies =
+    !["entregada", "anulada"].includes(order.status) &&
+    ctx.roles.some((r) => ["org_admin", "sede_admin", "recepcion"].includes(r));
+  const { data: studyCatalog } = canAddStudies
+    ? await supabase
+        .from("LIS_studies")
+        .select("id, codigo, nombre")
+        .eq("activo", true)
+        .or(`organization_id.is.null,organization_id.eq.${ctx.activeOrgId}`)
+        .order("nombre")
+    : { data: null };
+
   // Signed URLs (1 h) para descargar los informes archivados en Storage.
   // El acceso ya está autorizado: la fila de LIS_report_documents pasó RLS.
   const admin = createAdminClient();
@@ -103,6 +117,9 @@ export default async function OrderDetailPage({
             <Printer className="h-4 w-4" /> Reporte
           </Link>
         </Button>
+        {canAddStudies && studyCatalog && (
+          <AddStudyDialog orderId={order.id} studies={studyCatalog} />
+        )}
         <OrderActions orderId={order.id} status={order.status} roles={ctx.roles} />
       </PageHeader>
 

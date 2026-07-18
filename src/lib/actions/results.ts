@@ -15,6 +15,106 @@ export type ResultInput = {
 };
 
 export type CriticalValue = { analito: string; valor: string };
+export type DeltaAlert = { analito: string; anterior: string; actual: string; fecha: string };
+
+/** Umbral de delta check: variación relativa que dispara la alerta. */
+const DELTA_THRESHOLD = 0.5;
+
+/**
+ * Delta check: compara los valores numéricos recién ingresados con el último
+ * resultado validado del MISMO paciente y analito en órdenes anteriores.
+ * Una variación mayor al umbral sugiere intercambio de tubos o
+ * descalibración del analizador.
+ */
+async function findDeltaAlerts(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  orderId: string,
+  inputs: ResultInput[]
+): Promise<DeltaAlert[]> {
+  const numeric = inputs.filter((i) => i.valorNum != null && Number.isFinite(i.valorNum));
+  if (numeric.length === 0) return [];
+
+  const { data: order } = await supabase
+    .from("LIS_orders")
+    .select("patient_id")
+    .eq("id", orderId)
+    .maybeSingle();
+  if (!order) return [];
+
+  const analyteIds = [...new Set(numeric.map((i) => i.analyteId))];
+  const { data: previous } = await supabase
+    .from("LIS_results")
+    .select(
+      "analyte_id, analyte_nombre, analyte_unidad, valor_num, validado_at, order_items:LIS_order_items!inner(order_id, orders:LIS_orders!inner(patient_id))"
+    )
+    .in("analyte_id", analyteIds)
+    .eq("status", "validado")
+    .not("valor_num", "is", null)
+    .neq("order_items.order_id", orderId)
+    .eq("order_items.orders.patient_id", order.patient_id)
+    .order("validado_at", { ascending: false });
+
+  const lastByAnalyte = new Map<
+    string,
+    { nombre: string; unidad: string | null; valor: number; fecha: string }
+  >();
+  for (const r of previous ?? []) {
+    if (!lastByAnalyte.has(r.analyte_id) && r.valor_num != null) {
+      lastByAnalyte.set(r.analyte_id, {
+        nombre: r.analyte_nombre,
+        unidad: r.analyte_unidad,
+        valor: r.valor_num,
+        fecha: r.validado_at ?? "",
+      });
+    }
+  }
+
+  const alerts: DeltaAlert[] = [];
+  for (const input of numeric) {
+    const prev = lastByAnalyte.get(input.analyteId);
+    if (!prev || prev.valor === 0) continue;
+    const delta = Math.abs(input.valorNum! - prev.valor) / Math.abs(prev.valor);
+    if (delta > DELTA_THRESHOLD) {
+      const u = prev.unidad ? ` ${prev.unidad}` : "";
+      alerts.push({
+        analito: prev.nombre,
+        anterior: `${prev.valor}${u}`,
+        actual: `${input.valorNum}${u}`,
+        fecha: prev.fecha,
+      });
+    }
+  }
+  return alerts;
+}
+
+/**
+ * Registra la constancia de aviso de valores críticos (ISO 15189): a quién
+ * se comunicó, por qué medio y qué analitos. Queda en la bitácora de
+ * auditoría vía trigger.
+ */
+export async function recordCriticalNotificationAction(
+  orderId: string,
+  criticos: CriticalValue[],
+  notificadoA: string,
+  medio: string,
+  nota?: string
+) {
+  const ctx = await getSessionContext();
+  if (!notificadoA.trim()) return { error: "Indica a quién se avisó." };
+  const supabase = await createClient();
+  const { error } = await supabase.from("LIS_critical_notifications").insert({
+    organization_id: ctx.activeOrgId!,
+    order_id: orderId,
+    analitos: criticos,
+    notificado_a: notificadoA.trim(),
+    medio,
+    nota: nota?.trim() || null,
+    notificado_por: ctx.user.id,
+  });
+  if (error) return { error: error.message };
+  revalidatePath(`/ordenes/${orderId}`);
+  return { ok: true };
+}
 
 /** Valores críticos detectados en el lote recién guardado (para alertar). */
 async function findCriticals(
@@ -52,10 +152,13 @@ export async function saveResultsAction(orderId: string, inputs: ResultInput[]) 
     });
     if (error) return { error: error.message };
   }
-  const criticos = await findCriticals(supabase, inputs);
+  const [criticos, deltas] = await Promise.all([
+    findCriticals(supabase, inputs),
+    findDeltaAlerts(supabase, orderId, inputs),
+  ]);
   revalidatePath(`/resultados/${orderId}`);
   revalidatePath(`/ordenes/${orderId}`);
-  return { ok: true, criticos };
+  return { ok: true, criticos, deltas };
 }
 
 /**
@@ -81,7 +184,10 @@ export async function validateResultsAction(orderId: string, inputs: ResultInput
     if (error) return { error: error.message };
   }
 
-  const criticos = await findCriticals(supabase, inputs);
+  const [criticos, deltas] = await Promise.all([
+    findCriticals(supabase, inputs),
+    findDeltaAlerts(supabase, orderId, inputs),
+  ]);
 
   // El trigger rollup_order_status ya movió la orden a `completada` si este
   // era el último lote pendiente — ahí se encadena la automatización.
@@ -101,5 +207,5 @@ export async function validateResultsAction(orderId: string, inputs: ResultInput
 
   revalidatePath(`/resultados/${orderId}`);
   revalidatePath(`/ordenes/${orderId}`);
-  return { ok: true, criticos, automation };
+  return { ok: true, criticos, deltas, automation };
 }

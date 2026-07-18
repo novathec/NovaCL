@@ -16,10 +16,13 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
 import {
+  recordCriticalNotificationAction,
   saveResultsAction,
   validateResultsAction,
   type CriticalValue,
+  type DeltaAlert,
   type ResultInput,
 } from "@/lib/actions/results";
 import type { FinalizeSummary } from "@/lib/automation";
@@ -59,6 +62,11 @@ export function ResultsEntry({
   const router = useRouter();
   const [pending, start] = useTransition();
   const [criticos, setCriticos] = useState<CriticalValue[]>([]);
+  const [deltas, setDeltas] = useState<DeltaAlert[]>([]);
+  const [avisadoA, setAvisadoA] = useState("");
+  const [medioAviso, setMedioAviso] = useState("telefono");
+  const [notaAviso, setNotaAviso] = useState("");
+  const [savingAviso, startAviso] = useTransition();
   const [values, setValues] = useState<Record<string, string>>(() => {
     const init: Record<string, string> = {};
     for (const g of groups) {
@@ -106,8 +114,10 @@ export function ResultsEntry({
       }
       toast.success(validate ? "Resultados validados" : "Resultados guardados");
 
-      // Alerta activa de valores críticos: requiere confirmación explícita.
+      // Alerta activa de valores críticos: exige registrar el aviso al médico.
       if (res.criticos && res.criticos.length > 0) setCriticos(res.criticos);
+      // Delta check: variación anómala frente al histórico del paciente.
+      if (res.deltas && res.deltas.length > 0) setDeltas(res.deltas);
 
       // Efectos de la automatización al completar la orden
       const auto = ("automation" in res ? res.automation : undefined) as
@@ -176,7 +186,17 @@ export function ResultsEntry({
                             value={values[key] ?? ""}
                             disabled={locked}
                             onChange={(e) => setValues((v) => ({ ...v, [key]: e.target.value }))}
-                            className={cn(locked && "opacity-70")}
+                            className={cn(
+                              locked && "opacity-70",
+                              // Semaforización: el borde refleja el último flag calculado
+                              a.flag === "critico_alto" || a.flag === "critico_bajo"
+                                ? "border-l-4 border-l-red-500"
+                                : a.flag === "alto" || a.flag === "bajo"
+                                  ? "border-l-4 border-l-amber-500"
+                                  : a.flag === "normal"
+                                    ? "border-l-4 border-l-emerald-500"
+                                    : undefined
+                            )}
                           />
                         )}
                       </TableCell>
@@ -218,13 +238,13 @@ export function ResultsEntry({
         )}
       </div>
 
-      {/* Alerta bloqueante de valores críticos */}
-      <Dialog open={criticos.length > 0} onOpenChange={(o) => !o && setCriticos([])}>
-        <DialogContent className="max-w-md border-red-300 dark:border-red-900">
+      {/* Valores críticos: exige registrar la constancia de aviso (ISO 15189) */}
+      <Dialog open={criticos.length > 0} onOpenChange={() => undefined}>
+        <DialogContent className="max-w-md border-red-300 dark:border-red-900 [&>button]:hidden">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-red-600 dark:text-red-400">
               <AlertTriangle className="h-5 w-5 animate-pulse-glow rounded-full" />
-              Valores críticos detectados
+              Valores críticos — registrar aviso
             </DialogTitle>
           </DialogHeader>
           <ul className="space-y-2">
@@ -239,12 +259,107 @@ export function ResultsEntry({
             ))}
           </ul>
           <p className="text-sm text-muted-foreground">
-            El protocolo de valores críticos exige comunicar estos resultados al médico
-            solicitante de inmediato y dejar constancia en la nota del resultado.
+            Comunica estos resultados al médico o servicio solicitante de inmediato y
+            registra la constancia. Este registro queda en la trazabilidad de la orden.
+          </p>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label htmlFor="avisado-a">Se avisó a *</Label>
+              <Input
+                id="avisado-a"
+                value={avisadoA}
+                onChange={(e) => setAvisadoA(e.target.value)}
+                placeholder="Dr./Dra., servicio…"
+                autoFocus
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="medio-aviso">Medio</Label>
+              <select
+                id="medio-aviso"
+                className="h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
+                value={medioAviso}
+                onChange={(e) => setMedioAviso(e.target.value)}
+              >
+                <option value="telefono">Teléfono</option>
+                <option value="email">Email</option>
+                <option value="presencial">Presencial</option>
+                <option value="otro">Otro</option>
+              </select>
+            </div>
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="nota-aviso">Nota (opcional)</Label>
+            <Input
+              id="nota-aviso"
+              value={notaAviso}
+              onChange={(e) => setNotaAviso(e.target.value)}
+              placeholder="Ej. se indicó repetir la toma en 2 horas"
+            />
+          </div>
+          <DialogFooter>
+            <Button
+              variant="destructive"
+              disabled={savingAviso || !avisadoA.trim()}
+              onClick={() =>
+                startAviso(async () => {
+                  const r = await recordCriticalNotificationAction(
+                    orderId,
+                    criticos,
+                    avisadoA,
+                    medioAviso,
+                    notaAviso
+                  );
+                  if ("error" in r && r.error) {
+                    toast.error(r.error);
+                    return;
+                  }
+                  toast.success("Aviso crítico registrado en la trazabilidad");
+                  setCriticos([]);
+                  setAvisadoA("");
+                  setNotaAviso("");
+                })
+              }
+            >
+              {savingAviso && <Loader2 className="h-4 w-4 animate-spin" />}
+              Registrar aviso
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delta check: variación anómala frente al histórico del paciente */}
+      <Dialog open={deltas.length > 0} onOpenChange={(o) => !o && setDeltas([])}>
+        <DialogContent className="max-w-md border-amber-300 dark:border-amber-800">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-amber-600 dark:text-amber-400">
+              <AlertTriangle className="h-5 w-5" /> Fallo delta — verificar identidad de la muestra
+            </DialogTitle>
+          </DialogHeader>
+          <ul className="space-y-2">
+            {deltas.map((d, i) => (
+              <li
+                key={i}
+                className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm dark:border-amber-900 dark:bg-amber-950/40"
+              >
+                <p className="font-medium">{d.analito}</p>
+                <p className="text-xs text-muted-foreground">
+                  Anterior: <span className="font-mono">{d.anterior}</span> → Actual:{" "}
+                  <span className="font-mono font-semibold text-amber-700 dark:text-amber-300">
+                    {d.actual}
+                  </span>
+                </p>
+              </li>
+            ))}
+          </ul>
+          <p className="text-sm text-muted-foreground">
+            La variación frente al último resultado validado del paciente supera el umbral.
+            Verifica que el tubo corresponda al paciente y que el analizador esté calibrado
+            antes de firmar.
           </p>
           <DialogFooter>
-            <Button variant="destructive" onClick={() => setCriticos([])}>
-              Entendido, notificaré al médico
+            <Button variant="outline" onClick={() => setDeltas([])}>
+              Revisado, continuar
             </Button>
           </DialogFooter>
         </DialogContent>

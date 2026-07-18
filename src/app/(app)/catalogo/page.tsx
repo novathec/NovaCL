@@ -1,4 +1,5 @@
 import { getSessionContext, hasRole } from "@/lib/auth/session";
+import { requireModuleAccess } from "@/lib/auth/guard";
 import { createClient } from "@/lib/supabase/server";
 import { PageHeader } from "@/components/page-header";
 import { Card, CardContent } from "@/components/ui/card";
@@ -18,6 +19,7 @@ export const metadata = { title: "Catálogo" };
 
 export default async function CatalogoPage() {
   const ctx = await getSessionContext();
+  await requireModuleAccess("catalogo");
   const supabase = await createClient();
   const orgId = ctx.activeOrgId!;
   const orFilter = `organization_id.is.null,organization_id.eq.${orgId}`;

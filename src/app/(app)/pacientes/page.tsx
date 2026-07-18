@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { getSessionContext } from "@/lib/auth/session";
+import { requireModuleAccess } from "@/lib/auth/guard";
 import { createClient } from "@/lib/supabase/server";
 import { PageHeader } from "@/components/page-header";
 import { SearchInput } from "@/components/search-input";
@@ -19,6 +20,7 @@ export default async function PacientesPage({
 }) {
   const { q } = await searchParams;
   const ctx = await getSessionContext();
+  await requireModuleAccess("pacientes");
   const supabase = await createClient();
 
   let query = supabase

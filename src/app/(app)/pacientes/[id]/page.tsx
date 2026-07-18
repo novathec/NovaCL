@@ -5,6 +5,7 @@ import { getSessionContext } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { PageHeader } from "@/components/page-header";
 import { PatientDialog } from "@/components/patients/patient-dialog";
+import { ConsolidatedReportCard } from "@/components/patients/consolidated-report-card";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -42,6 +43,17 @@ export default async function PatientDetailPage({
     { icon: MapPin, label: "Dirección", value: patient.direccion ?? "—" },
   ];
 
+  // Órdenes elegibles para el informe consolidado: con resultados validados
+  const elegibles = (orders ?? [])
+    .filter((o) => o.items_validados > 0 && o.status !== "anulada")
+    .map((o) => ({
+      id: o.id,
+      codigo: o.codigo,
+      created_at: o.created_at,
+      items_validados: o.items_validados,
+      items_total: o.items_total,
+    }));
+
   return (
     <>
       <Button asChild variant="ghost" size="sm" className="mb-2">
@@ -65,22 +77,26 @@ export default async function PatientDetailPage({
       </PageHeader>
 
       <div className="grid gap-6 lg:grid-cols-3">
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Datos de contacto</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {info.map((i) => (
-              <div key={i.label} className="flex items-start gap-3">
-                <i.icon className="mt-0.5 h-4 w-4 text-muted-foreground" />
-                <div>
-                  <p className="text-xs text-muted-foreground">{i.label}</p>
-                  <p className="text-sm">{i.value}</p>
+        <div className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Datos de contacto</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {info.map((i) => (
+                <div key={i.label} className="flex items-start gap-3">
+                  <i.icon className="mt-0.5 h-4 w-4 text-muted-foreground" />
+                  <div>
+                    <p className="text-xs text-muted-foreground">{i.label}</p>
+                    <p className="text-sm">{i.value}</p>
+                  </div>
                 </div>
-              </div>
-            ))}
-          </CardContent>
-        </Card>
+              ))}
+            </CardContent>
+          </Card>
+
+          <ConsolidatedReportCard patientId={patient.id} orders={elegibles} />
+        </div>
 
         <Card className="lg:col-span-2">
           <CardHeader>

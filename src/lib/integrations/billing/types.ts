@@ -25,6 +25,7 @@ export type BillingRequest = {
   cliente: BillingCustomer;
   lineas: BillingLine[];
   referencia: string; // código de la orden
+  numero?: number; // correlativo SUNAT asignado por el emisor
 };
 
 export type BillingResult = {

@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { getSessionContext } from "@/lib/auth/session";
+import { requireModuleAccess } from "@/lib/auth/guard";
 import { createClient } from "@/lib/supabase/server";
 import { PageHeader } from "@/components/page-header";
 import { Card, CardContent } from "@/components/ui/card";
@@ -14,6 +15,7 @@ export const metadata = { title: "Entrega de resultados" };
 
 export default async function EntregaPage() {
   const ctx = await getSessionContext();
+  await requireModuleAccess("entrega");
   const supabase = await createClient();
 
   let query = supabase

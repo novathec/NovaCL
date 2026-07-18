@@ -118,3 +118,55 @@ export async function saveBillingAction(_prev: unknown, formData: FormData) {
   revalidatePath("/configuracion");
   return { ok: true };
 }
+
+// ── Permisos granulares por módulo ───────────────────────────
+
+export type PermissionEntry = { module: string; view: boolean; edit: boolean };
+
+/**
+ * Guarda la matriz de permisos de un rol para toda la organización
+ * (sedeId=null) o para una sede específica. Escribe una fila por módulo:
+ * un snapshot explícito, fácil de auditar.
+ */
+export async function savePermissionsAction(
+  sedeId: string | null,
+  role: Role,
+  entries: PermissionEntry[]
+) {
+  const ctx = await requireOrgAdmin();
+  const supabase = await createClient();
+  const rows = entries.map((e) => ({
+    organization_id: ctx.activeOrgId!,
+    sede_id: sedeId,
+    role,
+    module: e.module,
+    can_view: e.view,
+    can_edit: e.view && e.edit, // editar implica ver
+    updated_by: ctx.user.id,
+    updated_at: new Date().toISOString(),
+  }));
+  const { error } = await supabase
+    .from("LIS_role_permissions")
+    .upsert(rows, { onConflict: "organization_id,sede_id,role,module" });
+  if (error) return { error: error.message };
+  revalidatePath("/configuracion");
+  revalidatePath("/", "layout");
+  return { ok: true };
+}
+
+/** Elimina las sobrescrituras del rol en ese alcance → vuelven los defaults. */
+export async function resetPermissionsAction(sedeId: string | null, role: Role) {
+  const ctx = await requireOrgAdmin();
+  const supabase = await createClient();
+  let q = supabase
+    .from("LIS_role_permissions")
+    .delete()
+    .eq("organization_id", ctx.activeOrgId!)
+    .eq("role", role);
+  q = sedeId === null ? q.is("sede_id", null) : q.eq("sede_id", sedeId);
+  const { error } = await q;
+  if (error) return { error: error.message };
+  revalidatePath("/configuracion");
+  revalidatePath("/", "layout");
+  return { ok: true };
+}

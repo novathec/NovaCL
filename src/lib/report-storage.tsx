@@ -1,8 +1,8 @@
 import { createHash } from "node:crypto";
 import { renderToBuffer } from "@react-pdf/renderer";
 import { createAdminClient } from "@/lib/supabase/server";
-import { buildOrderReport } from "@/lib/reports";
-import { OrderReportPdf } from "@/lib/pdf/order-report-pdf";
+import { buildConsolidatedReport } from "@/lib/consolidated-report";
+import { LabReportPdf } from "@/lib/pdf/lab-report-pdf";
 
 const BUCKET = "reports";
 
@@ -11,9 +11,9 @@ export type StoredReport =
   | { ok: false; error: string };
 
 /**
- * Genera el PDF del informe (solo resultados validados), lo sube al bucket
- * privado `reports` y registra la fila en LIS_report_documents.
- * Versionado: cada llamada crea v{n+1} sin sobrescribir versiones previas.
+ * Genera el PDF del informe de una orden (formato ISO 15189, solo resultados
+ * validados), lo sube al bucket privado `reports` y registra la fila en
+ * LIS_report_documents. Versionado: cada llamada crea v{n+1} sin sobrescribir.
  * Corre con service role: pensado para invocarse desde server actions/webhooks.
  */
 export async function generateAndStoreOrderReport(
@@ -29,8 +29,8 @@ export async function generateAndStoreOrderReport(
     .maybeSingle();
   if (!order) return { ok: false, error: "Orden no encontrada." };
 
-  const report = await buildOrderReport(admin, orderId, true);
-  if (!report || report.studies.length === 0) {
+  const report = await buildConsolidatedReport(admin, [orderId], true);
+  if (!report || report.ordenes.every((o) => o.studies.length === 0)) {
     return { ok: false, error: "La orden no tiene resultados validados." };
   }
 
@@ -40,7 +40,7 @@ export async function generateAndStoreOrderReport(
     .eq("order_id", orderId);
   const version = (count ?? 0) + 1;
 
-  const buffer = await renderToBuffer(<OrderReportPdf data={report} version={version} />);
+  const buffer = await renderToBuffer(<LabReportPdf data={report} version={version} />);
   const storagePath = `${order.organization_id}/${orderId}/v${version}.pdf`;
 
   const { error: upErr } = await admin.storage.from(BUCKET).upload(storagePath, buffer, {
@@ -60,6 +60,49 @@ export async function generateAndStoreOrderReport(
   if (insErr) return { ok: false, error: insErr.message };
 
   return { ok: true, version, storagePath };
+}
+
+export type ConsolidatedPdfResult =
+  | { ok: true; url: string; reportId: string; storagePath: string }
+  | { ok: false; error: string };
+
+/**
+ * Genera un PDF consolidado con los resultados validados de varias órdenes
+ * del mismo paciente (fechas y metadatos de cada orden se conservan por
+ * sección). El archivo queda en `{org}/consolidados/{paciente}/` y se
+ * devuelve un enlace firmado de 7 días para entregarlo.
+ *
+ * Los PDF por orden en LIS_report_documents siguen siendo el registro
+ * oficial e inmutable; el consolidado es un documento de entrega.
+ */
+export async function generateConsolidatedPdf(
+  orderIds: string[],
+  patientId: string,
+  orgId: string
+): Promise<ConsolidatedPdfResult> {
+  const admin = createAdminClient();
+
+  const report = await buildConsolidatedReport(admin, orderIds, true);
+  if (!report) return { ok: false, error: "Órdenes inválidas o de pacientes distintos." };
+  if (report.ordenes.every((o) => o.studies.length === 0)) {
+    return { ok: false, error: "Las órdenes seleccionadas no tienen resultados validados." };
+  }
+
+  const buffer = await renderToBuffer(<LabReportPdf data={report} />);
+  const storagePath = `${orgId}/consolidados/${patientId}/${report.reportId}.pdf`;
+
+  const { error: upErr } = await admin.storage.from(BUCKET).upload(storagePath, buffer, {
+    contentType: "application/pdf",
+    upsert: true,
+  });
+  if (upErr) return { ok: false, error: `Storage: ${upErr.message}` };
+
+  const { data: signed } = await admin.storage
+    .from(BUCKET)
+    .createSignedUrl(storagePath, 60 * 60 * 24 * 7);
+  if (!signed?.signedUrl) return { ok: false, error: "No se pudo firmar el enlace." };
+
+  return { ok: true, url: signed.signedUrl, reportId: report.reportId, storagePath };
 }
 
 /** Signed URL de lectura (1 hora) para un informe almacenado. */

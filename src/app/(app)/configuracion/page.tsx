@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { SedeForm, MemberForm, BillingForm, SedeToggle, MemberRemove } from "@/components/admin/config-forms";
+import { PermissionsMatrix } from "@/components/admin/permissions-matrix";
 import { ROLE_LABELS } from "@/lib/constants";
 import type { Role } from "@/lib/database.types";
 
@@ -16,14 +17,19 @@ export default async function ConfiguracionPage() {
   const supabase = await createClient();
   const orgId = ctx.activeOrgId!;
 
-  const [{ data: sedes }, { data: members }, { data: billing }] = await Promise.all([
-    supabase.from("LIS_sedes").select("*").eq("organization_id", orgId).order("codigo"),
-    supabase
-      .from("LIS_memberships")
-      .select("id, role, sede_id, profiles:LIS_profiles(nombre,email), sedes:LIS_sedes(nombre)")
-      .eq("organization_id", orgId),
-    supabase.from("LIS_billing_integrations").select("*").eq("organization_id", orgId).maybeSingle(),
-  ]);
+  const [{ data: sedes }, { data: members }, { data: billing }, { data: permRows }] =
+    await Promise.all([
+      supabase.from("LIS_sedes").select("*").eq("organization_id", orgId).order("codigo"),
+      supabase
+        .from("LIS_memberships")
+        .select("id, role, sede_id, profiles:LIS_profiles(nombre,email), sedes:LIS_sedes(nombre)")
+        .eq("organization_id", orgId),
+      supabase.from("LIS_billing_integrations").select("*").eq("organization_id", orgId).maybeSingle(),
+      supabase
+        .from("LIS_role_permissions")
+        .select("sede_id, role, module, can_view, can_edit")
+        .eq("organization_id", orgId),
+    ]);
 
   const billingConfig =
     (billing?.config as {
@@ -41,8 +47,24 @@ export default async function ConfiguracionPage() {
         <TabsList>
           <TabsTrigger value="sedes">Sedes</TabsTrigger>
           <TabsTrigger value="equipo">Equipo y roles</TabsTrigger>
+          <TabsTrigger value="permisos">Permisos</TabsTrigger>
           <TabsTrigger value="facturacion">Facturación</TabsTrigger>
         </TabsList>
+
+        {/* ── Permisos granulares ── */}
+        <TabsContent value="permisos">
+          <Card className="max-w-3xl">
+            <CardHeader>
+              <CardTitle className="text-base">Permisos por rol y módulo</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <PermissionsMatrix
+                sedes={(sedes ?? []).map((s) => ({ id: s.id, nombre: s.nombre }))}
+                rows={(permRows ?? []) as never}
+              />
+            </CardContent>
+          </Card>
+        </TabsContent>
 
         {/* ── Sedes ── */}
         <TabsContent value="sedes">

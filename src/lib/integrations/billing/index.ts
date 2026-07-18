@@ -1,5 +1,6 @@
 import type { BillingProvider, BillingProviderConfig, BillingRequest, BillingResult } from "./types";
 import { WallyProvider } from "./wally";
+import { NubefactProvider } from "./nubefact";
 
 /** Proveedor "manual": registra el comprobante sin integración externa. */
 class ManualProvider implements BillingProvider {
@@ -25,6 +26,8 @@ class ManualProvider implements BillingProvider {
  */
 export function getBillingProvider(cfg: BillingProviderConfig): BillingProvider {
   switch (cfg.provider) {
+    case "nubefact":
+      return new NubefactProvider(cfg);
     case "wally":
       return new WallyProvider(cfg);
     case "manual":

@@ -27,10 +27,24 @@ const NEXT: Partial<Record<SampleStatus, { to: "recibida" | "en_analisis" | "pro
 // Una muestra puede rechazarse mientras no haya terminado su procesamiento.
 const REJECTABLE: SampleStatus[] = ["tomada", "en_transito", "recibida", "en_analisis"];
 
+// Catálogo estandarizado de motivos de rechazo pre-analítico (CLSI GP33)
+const REJECT_REASONS = [
+  "Muestra hemolizada",
+  "Muestra coagulada",
+  "Volumen insuficiente",
+  "Tubo incorrecto",
+  "Sin identificación / mal rotulada",
+  "Muestra derramada o contaminada",
+  "Tiempo de traslado excedido",
+  "Ayuno no cumplido",
+  "Otro",
+] as const;
+
 export function SampleRowActions({ sampleId, status }: { sampleId: string; status: SampleStatus }) {
   const router = useRouter();
   const [pending, start] = useTransition();
   const [openReject, setOpenReject] = useState(false);
+  const [razon, setRazon] = useState<string>("");
   const [motivo, setMotivo] = useState("");
   const next = NEXT[status];
   const rejectable = REJECTABLE.includes(status);
@@ -49,16 +63,23 @@ export function SampleRowActions({ sampleId, status }: { sampleId: string; statu
   }
 
   function reject() {
-    if (!motivo.trim()) {
-      toast.error("Indica el motivo del rechazo");
+    if (!razon) {
+      toast.error("Selecciona el motivo del rechazo");
       return;
     }
+    if (razon === "Otro" && !motivo.trim()) {
+      toast.error("Describe el motivo del rechazo");
+      return;
+    }
+    const detalle =
+      razon === "Otro" ? motivo.trim() : motivo.trim() ? `${razon} — ${motivo.trim()}` : razon;
     start(async () => {
-      const r = await updateSampleStatusAction(sampleId, "rechazada", motivo.trim());
+      const r = await updateSampleStatusAction(sampleId, "rechazada", detalle);
       if (r.error) toast.error(r.error);
       else {
         toast.success("Muestra rechazada; solicita nueva toma");
         setOpenReject(false);
+        setRazon("");
         setMotivo("");
         router.refresh();
       }
@@ -98,13 +119,35 @@ export function SampleRowActions({ sampleId, status }: { sampleId: string; statu
             recolectar una nueva. El motivo queda registrado en la trazabilidad.
           </p>
           <div className="space-y-2">
-            <Label htmlFor="motivo-rechazo">Motivo del rechazo</Label>
+            <Label htmlFor="razon-rechazo">Motivo del rechazo</Label>
+            <select
+              id="razon-rechazo"
+              className="h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
+              value={razon}
+              onChange={(e) => setRazon(e.target.value)}
+              autoFocus
+            >
+              <option value="">Selecciona un motivo…</option>
+              {REJECT_REASONS.map((r) => (
+                <option key={r} value={r}>
+                  {r}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="motivo-rechazo">
+              {razon === "Otro" ? "Describe el motivo" : "Detalle adicional (opcional)"}
+            </Label>
             <Textarea
               id="motivo-rechazo"
               value={motivo}
               onChange={(e) => setMotivo(e.target.value)}
-              placeholder="Ej. hemólisis, volumen insuficiente, tubo incorrecto…"
-              autoFocus
+              placeholder={
+                razon === "Otro"
+                  ? "Describe el motivo del rechazo…"
+                  : "Ej. hemólisis visible tras centrifugado…"
+              }
             />
           </div>
           <DialogFooter>

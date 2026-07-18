@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { getSessionContext } from "@/lib/auth/session";
+import { requireModuleAccess } from "@/lib/auth/guard";
 import { createClient } from "@/lib/supabase/server";
 import { PageHeader } from "@/components/page-header";
 import { Card, CardContent } from "@/components/ui/card";
@@ -20,6 +21,7 @@ const INVOICE_STATUS: Record<string, string> = {
 
 export default async function FacturacionPage() {
   const ctx = await getSessionContext();
+  await requireModuleAccess("facturacion");
   const supabase = await createClient();
 
   let query = supabase

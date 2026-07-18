@@ -322,6 +322,28 @@ export interface Database {
         created_at: string;
         updated_at: string;
       }>;
+      LIS_role_permissions: Table<{
+        id: string;
+        organization_id: string;
+        sede_id: string | null;
+        role: Role;
+        module: string;
+        can_view: boolean;
+        can_edit: boolean;
+        updated_by: string | null;
+        updated_at: string;
+      }>;
+      LIS_critical_notifications: Table<{
+        id: string;
+        organization_id: string;
+        order_id: string;
+        analitos: { analito: string; valor: string }[];
+        notificado_a: string;
+        medio: string;
+        nota: string | null;
+        notificado_por: string | null;
+        created_at: string;
+      }>;
       LIS_report_documents: Table<{
         id: string;
         organization_id: string;

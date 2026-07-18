@@ -186,6 +186,7 @@ export function BillingForm({
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
+            <SelectItem value="nubefact">NubeFact (SUNAT Perú)</SelectItem>
             <SelectItem value="wally">Wally</SelectItem>
             <SelectItem value="manual">Manual</SelectItem>
           </SelectContent>

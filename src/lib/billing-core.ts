@@ -54,10 +54,20 @@ export async function emitInvoiceForOrder(
     }[]
   ).filter((i) => i.status !== "anulado");
 
+  // Correlativo SUNAT: ascendente por serie, asignado por el emisor.
+  const serie = String(cfg.config.serie ?? "B001");
+  const { count: emitidas } = await supabase
+    .from("LIS_invoices")
+    .select("id", { count: "exact", head: true })
+    .eq("organization_id", orgId)
+    .eq("serie", serie);
+  const numero = (emitidas ?? 0) + 1;
+
   const provider = getBillingProvider(cfg);
   const result = await provider.emitInvoice({
     moneda: order.moneda,
     referencia: order.codigo,
+    numero,
     cliente: {
       tipo_documento: patient.tipo_documento,
       numero_documento: patient.numero_documento,

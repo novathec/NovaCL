@@ -1,5 +1,6 @@
 import { addDays, format, startOfWeek } from "date-fns";
 import { getSessionContext } from "@/lib/auth/session";
+import { requireModuleAccess } from "@/lib/auth/guard";
 import { createClient } from "@/lib/supabase/server";
 import { AgendaClient } from "@/components/agenda/agenda-client";
 
@@ -17,6 +18,7 @@ export default async function AgendaPage({
 }) {
   const params = await searchParams;
   const ctx = await getSessionContext();
+  await requireModuleAccess("agenda");
   const supabase = await createClient();
   const orgId = ctx.activeOrgId!;
   const sedeId = ctx.activeSedeId;

@@ -1,4 +1,5 @@
 import type { Role } from "@/lib/database.types";
+import type { ModuleKey, PermissionMap } from "@/lib/permissions";
 import {
   LayoutDashboard,
   CalendarDays,
@@ -63,11 +64,16 @@ export const NAV: NavSection[] = [
   },
 ];
 
-export function visibleNav(roles: Role[], isSuperadmin = false): NavSection[] {
+/**
+ * Navegación visible según los permisos efectivos del usuario (defaults +
+ * sobrescrituras granulares por organización/sede). El módulo de cada ítem
+ * se deriva de su ruta (`/agenda` → `agenda`).
+ */
+export function visibleNav(perms: PermissionMap): NavSection[] {
   return NAV.map((section) => ({
     ...section,
     items: section.items.filter(
-      (it) => !it.roles || isSuperadmin || it.roles.some((r) => roles.includes(r))
+      (it) => perms[it.href.slice(1) as ModuleKey]?.view === true
     ),
   })).filter((s) => s.items.length > 0);
 }
