@@ -1,4 +1,3 @@
-import { Users } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton, TableRowsSkeleton } from "@/components/ui/skeleton";
 import { LabLoader } from "@/components/ui/lab-loader";
@@ -18,7 +17,7 @@ export default function PacientesLoading() {
       </div>
       <Card>
         <CardContent className="p-6">
-          <LabLoader icon={Users} label="Cargando pacientes…" />
+          <LabLoader label="Cargando pacientes…" />
           <TableRowsSkeleton rows={5} />
         </CardContent>
       </Card>

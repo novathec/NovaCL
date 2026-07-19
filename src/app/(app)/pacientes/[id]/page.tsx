@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, FileText, Mail, Phone, MapPin, IdCard } from "lucide-react";
+import { ArrowLeft, FileText, Mail, Phone, MapPin, IdCard, Shield, Droplet, AlertTriangle } from "lucide-react";
 import { getSessionContext } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { PageHeader } from "@/components/page-header";
@@ -41,6 +41,15 @@ export default async function PatientDetailPage({
     { icon: Phone, label: "Teléfono", value: patient.telefono ?? "—" },
     { icon: Mail, label: "Email", value: patient.email ?? "—" },
     { icon: MapPin, label: "Dirección", value: patient.direccion ?? "—" },
+    { icon: Shield, label: "Seguro", value: patient.seguro ?? "—" },
+    {
+      icon: Droplet,
+      label: "Grupo sanguíneo",
+      value:
+        patient.grupo_sanguineo && patient.grupo_sanguineo !== "desconocido"
+          ? patient.grupo_sanguineo
+          : "—",
+    },
   ];
 
   // Órdenes elegibles para el informe consolidado: con resultados validados
@@ -75,6 +84,16 @@ export default async function PatientDetailPage({
           </Link>
         </Button>
       </PageHeader>
+
+      {patient.alergias && (
+        <div className="mb-6 flex items-start gap-3 rounded-lg border border-red-300 bg-red-50 p-4 text-sm dark:border-red-900 dark:bg-red-950/40">
+          <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-red-600 dark:text-red-400" />
+          <div>
+            <p className="font-semibold text-red-700 dark:text-red-300">Alergias conocidas</p>
+            <p className="text-red-700/90 dark:text-red-300/90">{patient.alergias}</p>
+          </div>
+        </div>
+      )}
 
       <div className="grid gap-6 lg:grid-cols-3">
         <div className="space-y-6">

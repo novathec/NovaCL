@@ -128,6 +128,67 @@ export function PatientForm({
         <Textarea id="direccion" name="direccion" defaultValue={patient?.direccion ?? ""} />
       </div>
 
+      {/* Datos clínicos y de seguridad */}
+      <div className="space-y-4 rounded-lg border p-4">
+        <p className="text-sm font-medium">Datos clínicos y de seguridad</p>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="space-y-2">
+            <Label htmlFor="grupo_sanguineo">Grupo sanguíneo y Rh</Label>
+            <Select name="grupo_sanguineo" defaultValue={patient?.grupo_sanguineo ?? "desconocido"}>
+              <SelectTrigger id="grupo_sanguineo">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="desconocido">No determinado</SelectItem>
+                {["O+", "O-", "A+", "A-", "B+", "B-", "AB+", "AB-"].map((g) => (
+                  <SelectItem key={g} value={g}>
+                    {g}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="seguro">Seguro / financiador</Label>
+            <Input
+              id="seguro"
+              name="seguro"
+              defaultValue={patient?.seguro ?? ""}
+              placeholder="EsSalud, SIS, EPS, particular…"
+            />
+          </div>
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="alergias">Alergias conocidas</Label>
+          <Textarea
+            id="alergias"
+            name="alergias"
+            defaultValue={patient?.alergias ?? ""}
+            placeholder="Ej. penicilina, látex, medio de contraste yodado…"
+          />
+        </div>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="space-y-2">
+            <Label htmlFor="antecedentes">Antecedentes</Label>
+            <Textarea
+              id="antecedentes"
+              name="antecedentes"
+              defaultValue={patient?.antecedentes ?? ""}
+              placeholder="Personales / familiares relevantes"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="contacto_emergencia">Contacto de emergencia</Label>
+            <Input
+              id="contacto_emergencia"
+              name="contacto_emergencia"
+              defaultValue={patient?.contacto_emergencia ?? ""}
+              placeholder="Nombre y teléfono"
+            />
+          </div>
+        </div>
+      </div>
+
       {state?.error && !state.fieldErrors && (
         <p className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">{state.error}</p>
       )}

@@ -105,15 +105,29 @@ export async function buildConsolidatedReport(
     results = data ?? [];
   }
 
-  // Nombres de los validadores
+  // Nombres de los validadores + su credencial profesional (colegiatura),
+  // para que el informe cumpla la identificación del responsable (ISO 15189).
   const validatorIds = [...new Set(results.map((r) => r.validado_por).filter((v): v is string => !!v))];
   const validatorNames = new Map<string, string>();
   if (validatorIds.length) {
-    const { data: profiles } = await supabase
-      .from("LIS_profiles")
-      .select("id, nombre")
-      .in("id", validatorIds);
-    for (const p of profiles ?? []) validatorNames.set(p.id, p.nombre);
+    const [{ data: profiles }, { data: pros }] = await Promise.all([
+      supabase.from("LIS_profiles").select("id, nombre").in("id", validatorIds),
+      supabase
+        .from("LIS_professionals")
+        .select("user_id, colegio, numero_colegiatura")
+        .eq("organization_id", orgId)
+        .in("user_id", validatorIds),
+    ]);
+    const credByUser = new Map<string, string>();
+    for (const p of pros ?? []) {
+      if (p.user_id && p.numero_colegiatura) {
+        credByUser.set(p.user_id, `${p.colegio ?? ""} ${p.numero_colegiatura}`.trim());
+      }
+    }
+    for (const p of profiles ?? []) {
+      const cred = credByUser.get(p.id);
+      validatorNames.set(p.id, cred ? `${p.nombre} (${cred})` : p.nombre);
+    }
   }
 
   const resultsByItem = new Map<string, typeof results>();

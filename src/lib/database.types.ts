@@ -240,8 +240,30 @@ export interface Database {
         telefono: string | null;
         email: string | null;
         direccion: string | null;
+        grupo_sanguineo: string | null;
+        alergias: string | null;
+        antecedentes: string | null;
+        seguro: string | null;
+        contacto_emergencia: string | null;
         portal_user_id: string | null;
         metadata: Json;
+        created_at: string;
+        updated_at: string;
+      }>;
+      LIS_professionals: Table<{
+        id: string;
+        organization_id: string;
+        user_id: string | null;
+        tipo: string;
+        nombres: string;
+        apellidos: string;
+        numero_colegiatura: string | null;
+        colegio: string | null;
+        especialidad: string | null;
+        telefono: string | null;
+        email: string | null;
+        externo: boolean;
+        activo: boolean;
         created_at: string;
         updated_at: string;
       }>;
@@ -258,6 +280,7 @@ export interface Database {
         status: OrderStatus;
         prioridad: OrderPriority;
         medico_solicitante: string | null;
+        medico_solicitante_id: string | null;
         diagnostico: string | null;
         observaciones: string | null;
         moneda: string;

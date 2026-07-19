@@ -33,6 +33,11 @@ const patientSchema = z.object({
   telefono: z.string().optional().nullable(),
   email: z.string().email("Email inválido").optional().or(z.literal("")),
   direccion: z.string().optional().nullable(),
+  grupo_sanguineo: z.string().optional().nullable(),
+  alergias: z.string().optional().nullable(),
+  antecedentes: z.string().optional().nullable(),
+  seguro: z.string().optional().nullable(),
+  contacto_emergencia: z.string().optional().nullable(),
 });
 
 export type PatientFormState =
@@ -71,6 +76,11 @@ export async function savePatientAction(
     telefono: data.telefono || null,
     email: data.email || null,
     direccion: data.direccion || null,
+    grupo_sanguineo: data.grupo_sanguineo || null,
+    alergias: data.alergias || null,
+    antecedentes: data.antecedentes || null,
+    seguro: data.seguro || null,
+    contacto_emergencia: data.contacto_emergencia || null,
   };
 
   const query = id

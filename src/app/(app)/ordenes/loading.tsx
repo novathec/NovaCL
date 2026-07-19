@@ -1,4 +1,3 @@
-import { ClipboardList } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton, TableRowsSkeleton } from "@/components/ui/skeleton";
 import { LabLoader } from "@/components/ui/lab-loader";
@@ -18,7 +17,7 @@ export default function OrdenesLoading() {
       </div>
       <Card>
         <CardContent className="p-6">
-          <LabLoader icon={ClipboardList} label="Cargando órdenes de la sede…" />
+          <LabLoader label="Cargando órdenes de la sede…" />
           <TableRowsSkeleton rows={5} />
         </CardContent>
       </Card>

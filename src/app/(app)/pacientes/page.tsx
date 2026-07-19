@@ -74,7 +74,8 @@ export default async function PacientesPage({
                       </p>
                     </TableCell>
                     <TableCell className="text-sm">
-                      {p.tipo_documento} {p.numero_documento}
+                      {p.numero_documento}
+                      <p className="text-xs text-muted-foreground">{p.tipo_documento}</p>
                     </TableCell>
                     <TableCell className="text-sm">{calcAge(p.fecha_nacimiento)}</TableCell>
                     <TableCell className="text-sm text-muted-foreground">

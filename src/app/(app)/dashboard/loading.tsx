@@ -1,4 +1,3 @@
-import { Activity } from "lucide-react";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { LabLoader } from "@/components/ui/lab-loader";
@@ -30,7 +29,7 @@ export default function DashboardLoading() {
           <Skeleton className="h-5 w-44" />
         </CardHeader>
         <CardContent>
-          <LabLoader icon={Activity} label="Analizando la actividad de la sede…" />
+          <LabLoader label="Analizando la actividad de la sede…" />
         </CardContent>
       </Card>
     </>

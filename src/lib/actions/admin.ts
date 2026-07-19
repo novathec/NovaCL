@@ -170,3 +170,44 @@ export async function resetPermissionsAction(sedeId: string | null, role: Role) 
   revalidatePath("/", "layout");
   return { ok: true };
 }
+
+// ── Profesionales (directorio compartido) ────────────────────
+
+export async function saveProfessionalAction(_prev: unknown, formData: FormData) {
+  const ctx = await requireOrgAdmin();
+  const id = String(formData.get("id") ?? "");
+  const nombres = String(formData.get("nombres") ?? "").trim();
+  const apellidos = String(formData.get("apellidos") ?? "").trim();
+  const tipo = String(formData.get("tipo") ?? "medico");
+  if (!nombres || !apellidos) return { error: "Nombres y apellidos son obligatorios." };
+
+  const payload = {
+    organization_id: ctx.activeOrgId!,
+    tipo,
+    nombres,
+    apellidos,
+    numero_colegiatura: String(formData.get("numero_colegiatura") ?? "").trim() || null,
+    colegio: String(formData.get("colegio") ?? "").trim() || null,
+    especialidad: String(formData.get("especialidad") ?? "").trim() || null,
+    telefono: String(formData.get("telefono") ?? "").trim() || null,
+    email: String(formData.get("email") ?? "").trim() || null,
+    externo: formData.get("externo") === "on",
+  };
+
+  const supabase = await createClient();
+  const { error } = id
+    ? await supabase.from("LIS_professionals").update(payload).eq("id", id)
+    : await supabase.from("LIS_professionals").insert(payload);
+  if (error) return { error: error.message };
+  revalidatePath("/configuracion");
+  return { ok: true };
+}
+
+export async function toggleProfessionalAction(id: string, activo: boolean) {
+  await requireOrgAdmin();
+  const supabase = await createClient();
+  const { error } = await supabase.from("LIS_professionals").update({ activo }).eq("id", id);
+  if (error) return { error: error.message };
+  revalidatePath("/configuracion");
+  return { ok: true };
+}

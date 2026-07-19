@@ -7,6 +7,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { SedeForm, MemberForm, BillingForm, SedeToggle, MemberRemove } from "@/components/admin/config-forms";
 import { PermissionsMatrix } from "@/components/admin/permissions-matrix";
+import { ProfessionalsPanel } from "@/components/admin/professionals-panel";
 import { ROLE_LABELS } from "@/lib/constants";
 import type { Role } from "@/lib/database.types";
 
@@ -17,8 +18,13 @@ export default async function ConfiguracionPage() {
   const supabase = await createClient();
   const orgId = ctx.activeOrgId!;
 
-  const [{ data: sedes }, { data: members }, { data: billing }, { data: permRows }] =
-    await Promise.all([
+  const [
+    { data: sedes },
+    { data: members },
+    { data: billing },
+    { data: permRows },
+    { data: professionals },
+  ] = await Promise.all([
       supabase.from("LIS_sedes").select("*").eq("organization_id", orgId).order("codigo"),
       supabase
         .from("LIS_memberships")
@@ -29,6 +35,11 @@ export default async function ConfiguracionPage() {
         .from("LIS_role_permissions")
         .select("sede_id, role, module, can_view, can_edit")
         .eq("organization_id", orgId),
+      supabase
+        .from("LIS_professionals")
+        .select("*")
+        .eq("organization_id", orgId)
+        .order("apellidos"),
     ]);
 
   const billingConfig =
@@ -47,9 +58,22 @@ export default async function ConfiguracionPage() {
         <TabsList>
           <TabsTrigger value="sedes">Sedes</TabsTrigger>
           <TabsTrigger value="equipo">Equipo y roles</TabsTrigger>
+          <TabsTrigger value="profesionales">Profesionales</TabsTrigger>
           <TabsTrigger value="permisos">Permisos</TabsTrigger>
           <TabsTrigger value="facturacion">Facturación</TabsTrigger>
         </TabsList>
+
+        {/* ── Profesionales ── */}
+        <TabsContent value="profesionales">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Directorio de profesionales</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <ProfessionalsPanel professionals={professionals ?? []} />
+            </CardContent>
+          </Card>
+        </TabsContent>
 
         {/* ── Permisos granulares ── */}
         <TabsContent value="permisos">
