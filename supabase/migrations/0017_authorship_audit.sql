@@ -99,6 +99,12 @@ create index if not exists "LIS_idx_audit_sede" on public."LIS_audit_log"(sede_i
 
 -- ─────────────────────────────────────────────────────────────
 -- Agenda: exponer quién creó la cita (created_by → nombre del autor).
+--
+-- IMPORTANTE: CREATE OR REPLACE VIEW no permite reordenar ni renombrar
+-- columnas existentes, solo agregar columnas nuevas al final. Por eso
+-- created_by/creado_por se añaden DESPUÉS de order_codigo, preservando el
+-- orden y nombre exactos de las 23 columnas originales (definidas en
+-- 0011_scheduling.sql).
 -- ─────────────────────────────────────────────────────────────
 create or replace view public.v_agenda
 with (security_invoker = true) as
@@ -118,8 +124,6 @@ select
   a.canal,
   a.notas,
   a.created_at,
-  a.created_by,
-  coalesce(nullif(cb.nombre, ''), cb.email)  as creado_por,
   s.nombre                             as sede_nombre,
   (p.nombres || ' ' || p.apellidos)    as paciente,
   p.tipo_documento,
@@ -127,7 +131,9 @@ select
   p.telefono,
   p.sexo,
   p.fecha_nacimiento,
-  o.codigo                             as order_codigo
+  o.codigo                             as order_codigo,
+  a.created_by,
+  coalesce(nullif(cb.nombre, ''), cb.email)  as creado_por
 from public."LIS_appointments" a
 join public."LIS_sedes" s    on s.id = a.sede_id
 join public."LIS_patients" p on p.id = a.patient_id
@@ -175,42 +181,54 @@ left join public."LIS_profiles" vp on vp.id = val.uid;
 --   · Sedes y organización (estructura del tenant)
 --   · Informes archivados e integración de facturación
 -- ─────────────────────────────────────────────────────────────
+drop trigger if exists trg_audit_sample_items on public."LIS_sample_items";
 create trigger trg_audit_sample_items
   after insert or update or delete on public."LIS_sample_items"
   for each row execute function app.audit_trigger();
 
+drop trigger if exists trg_audit_studies on public."LIS_studies";
 create trigger trg_audit_studies
   after insert or update or delete on public."LIS_studies"
   for each row execute function app.audit_trigger();
+drop trigger if exists trg_audit_study_analytes on public."LIS_study_analytes";
 create trigger trg_audit_study_analytes
   after insert or update or delete on public."LIS_study_analytes"
   for each row execute function app.audit_trigger();
+drop trigger if exists trg_audit_study_prices on public."LIS_study_prices";
 create trigger trg_audit_study_prices
   after insert or update or delete on public."LIS_study_prices"
   for each row execute function app.audit_trigger();
+drop trigger if exists trg_audit_analytes on public."LIS_analytes";
 create trigger trg_audit_analytes
   after insert or update or delete on public."LIS_analytes"
   for each row execute function app.audit_trigger();
+drop trigger if exists trg_audit_reference_ranges on public."LIS_reference_ranges";
 create trigger trg_audit_reference_ranges
   after insert or update or delete on public."LIS_reference_ranges"
   for each row execute function app.audit_trigger();
+drop trigger if exists trg_audit_test_categories on public."LIS_test_categories";
 create trigger trg_audit_test_categories
   after insert or update or delete on public."LIS_test_categories"
   for each row execute function app.audit_trigger();
+drop trigger if exists trg_audit_specimen_types on public."LIS_specimen_types";
 create trigger trg_audit_specimen_types
   after insert or update or delete on public."LIS_specimen_types"
   for each row execute function app.audit_trigger();
 
+drop trigger if exists trg_audit_sedes on public."LIS_sedes";
 create trigger trg_audit_sedes
   after insert or update or delete on public."LIS_sedes"
   for each row execute function app.audit_trigger();
+drop trigger if exists trg_audit_organizations on public."LIS_organizations";
 create trigger trg_audit_organizations
   after insert or update or delete on public."LIS_organizations"
   for each row execute function app.audit_trigger();
 
+drop trigger if exists trg_audit_report_documents on public."LIS_report_documents";
 create trigger trg_audit_report_documents
   after insert or update or delete on public."LIS_report_documents"
   for each row execute function app.audit_trigger();
+drop trigger if exists trg_audit_billing_integrations on public."LIS_billing_integrations";
 create trigger trg_audit_billing_integrations
   after insert or update or delete on public."LIS_billing_integrations"
   for each row execute function app.audit_trigger();
