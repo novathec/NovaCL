@@ -1,5 +1,5 @@
 import { Suspense } from "react";
-import { FlaskConical } from "lucide-react";
+import Image from "next/image";
 import { LoginForm } from "./login-form";
 
 export const metadata = { title: "Ingresar" };
@@ -17,9 +17,16 @@ export default function LoginPage() {
           aria-hidden
           className="pointer-events-none absolute -bottom-32 -left-16 h-96 w-96 rounded-full bg-white/10 blur-3xl"
         />
-        <div className="relative flex items-center gap-2 text-lg font-semibold animate-fade-in">
-          <FlaskConical className="h-6 w-6" />
-          Nova Lab
+        <div className="relative flex items-center gap-3 animate-fade-in">
+          <Image
+            src="/logo/logo.png"
+            alt="NovaLIS"
+            width={72}
+            height={72}
+            priority
+            className="h-10 w-10 shrink-0 object-contain drop-shadow"
+          />
+          <span className="text-lg font-semibold">Nova Lab</span>
         </div>
         <div className="relative space-y-4 animate-fade-up">
           <h1 className="text-3xl font-bold leading-tight">
@@ -39,11 +46,15 @@ export default function LoginPage() {
       {/* Formulario */}
       <div className="flex items-center justify-center p-6">
         <div className="w-full max-w-sm space-y-6 animate-fade-up">
-          <div className="space-y-2 text-center lg:hidden">
-            <div className="flex items-center justify-center gap-2 text-lg font-semibold">
-              <FlaskConical className="h-6 w-6 text-primary" />
-              Nova Lab
-            </div>
+          <div className="flex flex-col items-center gap-2 text-center lg:hidden">
+            <Image
+              src="/isotipo/Isotipo.png"
+              alt="NovaLIS"
+              width={220}
+              height={260}
+              priority
+              className="h-24 w-auto object-contain"
+            />
           </div>
           <div className="space-y-1">
             <h2 className="text-2xl font-semibold tracking-tight">Bienvenido de nuevo</h2>

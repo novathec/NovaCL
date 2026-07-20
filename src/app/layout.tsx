@@ -15,6 +15,13 @@ export const metadata: Metadata = {
   },
   description:
     "Sistema de información de laboratorio clínico (LIS) multi-sede: pacientes, órdenes, resultados y trazabilidad.",
+  icons: {
+    icon: [
+      { url: "/logo/logo.png", type: "image/png" },
+    ],
+    shortcut: "/logo/logo.png",
+    apple: "/logo/logo.png",
+  },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

@@ -1,9 +1,10 @@
 "use client";
 
 import { useState } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Menu, FlaskConical } from "lucide-react";
+import { Menu } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
@@ -21,8 +22,25 @@ export function MobileNav({ sections }: { sections: NavSection[] }) {
         </Button>
       </DialogTrigger>
       <DialogContent className="left-0 top-0 h-full max-w-[17rem] translate-x-0 translate-y-0 rounded-none rounded-r-xl">
-        <DialogTitle className="flex items-center gap-2">
-          <FlaskConical className="h-5 w-5 text-primary" /> Nova Lab
+        <DialogTitle asChild>
+          <div className="flex items-center gap-2">
+            <Image
+              src="/logo/logo.png"
+              alt="NovaLIS"
+              width={64}
+              height={64}
+              priority
+              className="h-8 w-8 shrink-0 object-contain"
+            />
+            <Image
+              src="/tipografia/tipografia.png"
+              alt="NovaLIS"
+              width={480}
+              height={120}
+              priority
+              className="h-5 w-auto object-contain"
+            />
+          </div>
         </DialogTitle>
         <nav className="space-y-5">
           {sections.map((section) => (

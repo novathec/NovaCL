@@ -1,9 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { FlaskConical, PanelLeftClose, PanelLeftOpen } from "lucide-react";
+import { PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { NAV_ICONS, type NavSection } from "@/lib/nav";
 
@@ -33,21 +34,38 @@ export function Sidebar({ sections }: { sections: NavSection[] }) {
     >
       <div
         className={cn(
-          "flex h-14 items-center gap-2 border-b font-semibold",
-          collapsed ? "justify-center px-0" : "px-5"
+          "flex h-14 items-center border-b font-semibold",
+          collapsed ? "justify-center px-0" : "gap-2 px-4"
         )}
       >
-        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-brand-gradient text-primary-foreground shadow-glow">
-          <FlaskConical className="h-4 w-4" />
-        </span>
-        <span
+        <Link
+          href={"/dashboard" as never}
+          aria-label="NovaLIS"
           className={cn(
-            "overflow-hidden whitespace-nowrap transition-all duration-200",
-            collapsed ? "w-0 opacity-0" : "w-auto opacity-100"
+            "flex items-center gap-2 transition-opacity hover:opacity-90",
+            collapsed ? "justify-center" : ""
           )}
         >
-          Nova Lab
-        </span>
+          <Image
+            src="/logo/logo.png"
+            alt="NovaLIS"
+            width={64}
+            height={64}
+            priority
+            className="h-8 w-8 shrink-0 object-contain"
+          />
+          <Image
+            src="/tipografia/tipografia.png"
+            alt="NovaLIS"
+            width={480}
+            height={120}
+            priority
+            className={cn(
+              "h-5 w-auto object-contain transition-all duration-200",
+              collapsed ? "hidden" : "block"
+            )}
+          />
+        </Link>
       </div>
       <nav className="flex-1 space-y-6 overflow-y-auto overflow-x-hidden px-3 py-4">
         {sections.map((section) => (
