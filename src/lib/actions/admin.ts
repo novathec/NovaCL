@@ -14,6 +14,14 @@ async function requireOrgAdmin() {
   return ctx;
 }
 
+async function requireOrgAdminOnly() {
+  const ctx = await getSessionContext();
+  if (!hasRole(ctx.roles, ["org_admin"]) && !ctx.profile?.es_superadmin) {
+    throw new Error("Solo el administrador de la organización puede gestionar sedes adicionales.");
+  }
+  return ctx;
+}
+
 const phoneSchema = z
   .string()
   .trim()
@@ -37,7 +45,7 @@ const colegiaturaSchema = z
 
 // ── Sedes ────────────────────────────────────────────────────
 export async function createSedeAction(_prev: unknown, formData: FormData) {
-  const ctx = await requireOrgAdmin();
+  const ctx = await requireOrgAdminOnly();
   const nombre = String(formData.get("nombre") ?? "").trim();
   const codigo = String(formData.get("codigo") ?? "").trim();
   const direccion = String(formData.get("direccion") ?? "").trim();
@@ -58,7 +66,7 @@ export async function createSedeAction(_prev: unknown, formData: FormData) {
 }
 
 export async function toggleSedeAction(sedeId: string, activo: boolean) {
-  await requireOrgAdmin();
+  await requireOrgAdminOnly();
   const supabase = await createClient();
   const { error } = await supabase.from("LIS_sedes").update({ activo }).eq("id", sedeId);
   if (error) return { error: error.message };

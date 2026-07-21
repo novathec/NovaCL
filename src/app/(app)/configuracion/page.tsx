@@ -1,4 +1,4 @@
-import { requireRole } from "@/lib/auth/session";
+import { requireRole, hasRole } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { PageHeader } from "@/components/page-header";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -17,6 +17,7 @@ export default async function ConfiguracionPage() {
   const ctx = await requireRole(["org_admin", "sede_admin"]);
   const supabase = await createClient();
   const orgId = ctx.activeOrgId!;
+  const canManageSedes = ctx.profile?.es_superadmin || hasRole(ctx.roles, ["org_admin"]);
 
   const [
     { data: sedes },
@@ -133,7 +134,14 @@ export default async function ConfiguracionPage() {
                 <CardTitle className="text-base">Nueva sede</CardTitle>
               </CardHeader>
               <CardContent>
-                <SedeForm />
+                {canManageSedes ? (
+                  <SedeForm />
+                ) : (
+                  <p className="text-xs text-muted-foreground">
+                    Solo el administrador de la organización puede dar de alta sedes nuevas.
+                    Pídele a tu org_admin que la cree desde su panel.
+                  </p>
+                )}
               </CardContent>
             </Card>
           </div>

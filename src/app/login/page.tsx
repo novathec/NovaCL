@@ -18,7 +18,7 @@ export default function LoginPage() {
         aria-hidden
         fill
         priority
-        className="pointer-events-none scale-105 object-cover object-[32%_45%] opacity-95 blur-[2px]"
+        className="pointer-events-none scale-105 object-cover object-[32%_45%] opacity-95"
       />
 
       {/* Velo de marca: tinte sutil que da elegancia sin ocultar la fotografía */}
