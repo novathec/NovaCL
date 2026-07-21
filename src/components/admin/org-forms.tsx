@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useEffect, useState, useTransition } from "react";
+import { useActionState, useEffect, useRef, useState, useTransition } from "react";
 import { useFormStatus } from "react-dom";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
@@ -29,13 +29,6 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { ROLE_OPTIONS, ROLE_LABELS } from "@/lib/constants";
 
@@ -55,15 +48,41 @@ function useToastEffect(
   onOk?: () => void,
 ) {
   const router = useRouter();
+  const lastOkIdRef = useRef<string | null>(null);
   useEffect(() => {
     if (state?.ok) {
-      toast.success(okMsg);
-      onOk?.();
-      router.refresh();
+      const sig = `${okMsg}:${state.id ?? ""}`;
+      if (lastOkIdRef.current !== sig) {
+        lastOkIdRef.current = sig;
+        toast.success(okMsg);
+        onOk?.();
+        router.refresh();
+      }
     } else if (state?.error) {
       toast.error(state.error);
     }
   }, [state, okMsg, router, onOk]);
+}
+
+function slugify(value: string) {
+  return value
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 60);
+}
+
+function codeFromName(value: string) {
+  const tokens = slugify(value)
+    .split("-")
+    .filter(Boolean);
+  if (tokens.length === 0) return "";
+  const left = tokens[0].slice(0, 3).toUpperCase();
+  if (tokens.length === 1) return left.slice(0, 6);
+  const right = tokens[1].slice(0, 3).toUpperCase();
+  return `${left}-${right}`;
 }
 
 const TIMEZONES = [
@@ -90,6 +109,9 @@ export function CreateOrganizationButton() {
     createOrganizationAction,
     undefined,
   );
+  const [nombre, setNombre] = useState("");
+  const [slug, setSlug] = useState("");
+  const [slugTouched, setSlugTouched] = useState(false);
   useToastEffect(state, "Organización creada", () => setOpen(false));
 
   return (
@@ -109,11 +131,38 @@ export function CreateOrganizationButton() {
         <form action={action} className="grid gap-3 sm:grid-cols-2">
           <div className="space-y-1.5 sm:col-span-2">
             <Label htmlFor="nombre">Nombre comercial</Label>
-            <Input id="nombre" name="nombre" required placeholder="Clinica San Felipe" />
+            <Input
+              id="nombre"
+              name="nombre"
+              required
+              placeholder="Clinica San Felipe"
+              value={nombre}
+              onChange={(e) => {
+                const next = e.target.value;
+                setNombre(next);
+                if (!slugTouched) setSlug(slugify(next));
+              }}
+            />
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="slug">Slug</Label>
-            <Input id="slug" name="slug" placeholder="clinica-san-felipe" />
+            <Input
+              id="slug"
+              name="slug"
+              placeholder="clinica-san-felipe"
+              value={slug}
+              onChange={(e) => {
+                setSlugTouched(true);
+                setSlug(slugify(e.target.value));
+              }}
+              onBlur={(e) => setSlug(slugify(e.target.value))}
+              title="Sugerencia automática según el nombre comercial"
+            />
+            {!slug && nombre && (
+              <p className="text-xs text-muted-foreground">
+                Sugerencia: <span className="font-mono">{slugify(nombre)}</span>
+              </p>
+            )}
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="ruc">RUC / Identificación fiscal</Label>
@@ -125,30 +174,46 @@ export function CreateOrganizationButton() {
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="timezone">Zona horaria</Label>
-            <Select name="timezone" defaultValue="America/Lima">
-              <SelectTrigger id="timezone"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                {TIMEZONES.map((t) => (
-                  <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <select
+              id="timezone"
+              name="timezone"
+              defaultValue="America/Lima"
+              className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm"
+            >
+              {TIMEZONES.map((t) => (
+                <option key={t.value} value={t.value}>{t.label}</option>
+              ))}
+            </select>
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="locale">Locale</Label>
-            <Select name="locale" defaultValue="es-PE">
-              <SelectTrigger id="locale"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                {LOCALES.map((l) => (
-                  <SelectItem key={l.value} value={l.value}>{l.label}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <select
+              id="locale"
+              name="locale"
+              defaultValue="es-PE"
+              className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm"
+            >
+              {LOCALES.map((l) => (
+                <option key={l.value} value={l.value}>{l.label}</option>
+              ))}
+            </select>
           </div>
-          <label className="flex items-center gap-2 text-sm sm:col-span-2">
-            <input type="checkbox" name="activo" defaultChecked className="h-4 w-4" />
-            Activa al crear
-          </label>
+          <input type="hidden" name="activo" value="on" />
+          <div className="flex items-center gap-2 text-sm sm:col-span-2">
+            <input
+              id="activo-check"
+              type="checkbox"
+              defaultChecked
+              className="h-4 w-4"
+              onChange={(e) => {
+                const hidden = (e.currentTarget.form?.elements.namedItem(
+                  "activo",
+                ) ?? null) as HTMLInputElement | null;
+                if (hidden) hidden.value = e.currentTarget.checked ? "on" : "off";
+              }}
+            />
+            <label htmlFor="activo-check">Activa al crear</label>
+          </div>
           <DialogFooter className="sm:col-span-2">
             <Button type="button" variant="ghost" onClick={() => setOpen(false)}>
               Cancelar
@@ -211,35 +276,46 @@ export function EditOrganizationButton({
           </div>
           <div className="space-y-1.5">
             <Label htmlFor={`tz-${org.id}`}>Zona horaria</Label>
-            <Select name="timezone" defaultValue={org.timezone}>
-              <SelectTrigger id={`tz-${org.id}`}><SelectValue /></SelectTrigger>
-              <SelectContent>
-                {TIMEZONES.map((t) => (
-                  <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <select
+              id={`tz-${org.id}`}
+              name="timezone"
+              defaultValue={org.timezone}
+              className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm"
+            >
+              {TIMEZONES.map((t) => (
+                <option key={t.value} value={t.value}>{t.label}</option>
+              ))}
+            </select>
           </div>
           <div className="space-y-1.5">
             <Label htmlFor={`loc-${org.id}`}>Locale</Label>
-            <Select name="locale" defaultValue={org.locale}>
-              <SelectTrigger id={`loc-${org.id}`}><SelectValue /></SelectTrigger>
-              <SelectContent>
-                {LOCALES.map((l) => (
-                  <SelectItem key={l.value} value={l.value}>{l.label}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <select
+              id={`loc-${org.id}`}
+              name="locale"
+              defaultValue={org.locale}
+              className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm"
+            >
+              {LOCALES.map((l) => (
+                <option key={l.value} value={l.value}>{l.label}</option>
+              ))}
+            </select>
           </div>
-          <label className="flex items-center gap-2 text-sm sm:col-span-2">
+          <input type="hidden" name="activo" value={org.activo ? "on" : "off"} />
+          <div className="flex items-center gap-2 text-sm sm:col-span-2">
             <input
+              id={`activo-edit-${org.id}`}
               type="checkbox"
-              name="activo"
               defaultChecked={org.activo}
               className="h-4 w-4"
+              onChange={(e) => {
+                const hidden = (e.currentTarget.form?.elements.namedItem(
+                  "activo",
+                ) ?? null) as HTMLInputElement | null;
+                if (hidden) hidden.value = e.currentTarget.checked ? "on" : "off";
+              }}
             />
-            Activa
-          </label>
+            <label htmlFor={`activo-edit-${org.id}`}>Activa</label>
+          </div>
           <DialogFooter className="sm:col-span-2">
             <Button type="button" variant="ghost" onClick={() => setOpen(false)}>
               Cancelar
@@ -286,6 +362,9 @@ export function CreateSedeButton({ orgId }: { orgId: string }) {
     createSedeForOrgAction,
     undefined,
   );
+  const [nombreSede, setNombreSede] = useState("");
+  const [codigo, setCodigo] = useState("");
+  const [codigoTouched, setCodigoTouched] = useState(false);
   useToastEffect(state, "Sede creada", () => setOpen(false));
 
   return (
@@ -306,11 +385,38 @@ export function CreateSedeButton({ orgId }: { orgId: string }) {
           <input type="hidden" name="organization_id" value={orgId} />
           <div className="space-y-1.5">
             <Label htmlFor={`codigo-${orgId}`}>Código</Label>
-            <Input id={`codigo-${orgId}`} name="codigo" required placeholder="S001" />
+            <Input
+              id={`codigo-${orgId}`}
+              name="codigo"
+              required
+              placeholder="S001"
+              value={codigo}
+              onChange={(e) => {
+                setCodigoTouched(true);
+                setCodigo(e.target.value.toUpperCase());
+              }}
+              title="Sugerencia automática según el nombre de la sede"
+            />
+            {!codigo && nombreSede && (
+              <p className="text-xs text-muted-foreground">
+                Sugerencia: <span className="font-mono">{codeFromName(nombreSede)}</span>
+              </p>
+            )}
           </div>
           <div className="space-y-1.5">
             <Label htmlFor={`nombre-sede-${orgId}`}>Nombre</Label>
-            <Input id={`nombre-sede-${orgId}`} name="nombre" required placeholder="Sede Central" />
+            <Input
+              id={`nombre-sede-${orgId}`}
+              name="nombre"
+              required
+              placeholder="Sede Central"
+              value={nombreSede}
+              onChange={(e) => {
+                const next = e.target.value;
+                setNombreSede(next);
+                if (!codigoTouched) setCodigo(codeFromName(next));
+              }}
+            />
           </div>
           <div className="space-y-1.5 sm:col-span-2">
             <Label htmlFor={`dir-${orgId}`}>Dirección</Label>
@@ -324,14 +430,38 @@ export function CreateSedeButton({ orgId }: { orgId: string }) {
             <Label htmlFor={`mail-${orgId}`}>Email</Label>
             <Input id={`mail-${orgId}`} name="email" type="email" />
           </div>
-          <label className="flex items-center gap-2 text-sm sm:col-span-2">
-            <input type="checkbox" name="es_procesadora" defaultChecked className="h-4 w-4" />
-            Procesa muestras (sede con laboratorio)
-          </label>
-          <label className="flex items-center gap-2 text-sm sm:col-span-2">
-            <input type="checkbox" name="activo" defaultChecked className="h-4 w-4" />
-            Activa
-          </label>
+          <input type="hidden" name="es_procesadora" value="on" />
+          <input type="hidden" name="activo" value="on" />
+          <div className="flex items-center gap-2 text-sm sm:col-span-2">
+            <input
+              id={`procesa-${orgId}`}
+              type="checkbox"
+              defaultChecked
+              className="h-4 w-4"
+              onChange={(e) => {
+                const hidden = (e.currentTarget.form?.elements.namedItem(
+                  "es_procesadora",
+                ) ?? null) as HTMLInputElement | null;
+                if (hidden) hidden.value = e.currentTarget.checked ? "on" : "off";
+              }}
+            />
+            <label htmlFor={`procesa-${orgId}`}>Procesa muestras (sede con laboratorio)</label>
+          </div>
+          <div className="flex items-center gap-2 text-sm sm:col-span-2">
+            <input
+              id={`activa-${orgId}`}
+              type="checkbox"
+              defaultChecked
+              className="h-4 w-4"
+              onChange={(e) => {
+                const hidden = (e.currentTarget.form?.elements.namedItem(
+                  "activo",
+                ) ?? null) as HTMLInputElement | null;
+                if (hidden) hidden.value = e.currentTarget.checked ? "on" : "off";
+              }}
+            />
+            <label htmlFor={`activa-${orgId}`}>Activa</label>
+          </div>
           <DialogFooter className="sm:col-span-2">
             <Button type="button" variant="ghost" onClick={() => setOpen(false)}>
               Cancelar
@@ -398,24 +528,42 @@ export function EditSedeButton({
             <Label htmlFor={`em-${sede.id}`}>Email</Label>
             <Input id={`em-${sede.id}`} name="email" type="email" defaultValue={sede.email ?? ""} />
           </div>
-          <label className="flex items-center gap-2 text-sm sm:col-span-2">
+          <input
+            type="hidden"
+            name="es_procesadora"
+            value={sede.es_procesadora ? "on" : "off"}
+          />
+          <input type="hidden" name="activo" value={sede.activo ? "on" : "off"} />
+          <div className="flex items-center gap-2 text-sm sm:col-span-2">
             <input
+              id={`procesa-${sede.id}`}
               type="checkbox"
-              name="es_procesadora"
               defaultChecked={sede.es_procesadora}
               className="h-4 w-4"
+              onChange={(e) => {
+                const hidden = (e.currentTarget.form?.elements.namedItem(
+                  "es_procesadora",
+                ) ?? null) as HTMLInputElement | null;
+                if (hidden) hidden.value = e.currentTarget.checked ? "on" : "off";
+              }}
             />
-            Procesa muestras
-          </label>
-          <label className="flex items-center gap-2 text-sm sm:col-span-2">
+            <label htmlFor={`procesa-${sede.id}`}>Procesa muestras</label>
+          </div>
+          <div className="flex items-center gap-2 text-sm sm:col-span-2">
             <input
+              id={`activa-${sede.id}`}
               type="checkbox"
-              name="activo"
               defaultChecked={sede.activo}
               className="h-4 w-4"
+              onChange={(e) => {
+                const hidden = (e.currentTarget.form?.elements.namedItem(
+                  "activo",
+                ) ?? null) as HTMLInputElement | null;
+                if (hidden) hidden.value = e.currentTarget.checked ? "on" : "off";
+              }}
             />
-            Activa
-          </label>
+            <label htmlFor={`activa-${sede.id}`}>Activa</label>
+          </div>
           <DialogFooter className="sm:col-span-2">
             <Button type="button" variant="ghost" onClick={() => setOpen(false)}>
               Cancelar
@@ -496,11 +644,32 @@ export function PromoteMemberButton({
             El usuario ya debe existir en Supabase Auth. Se crea una membership directa.
           </DialogDescription>
         </DialogHeader>
-        <div className="grid gap-3">
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            start(async () => {
+              const r = await promoteToOrgAdminAction(
+                orgId,
+                email,
+                role,
+                sedeId || null,
+              );
+              if (r?.error) toast.error(r.error);
+              else {
+                toast.success("Administrador asignado");
+                setOpen(false);
+                setEmail("");
+                router.refresh();
+              }
+            });
+          }}
+          className="grid gap-3"
+        >
           <div className="space-y-1.5">
             <Label>Email del usuario</Label>
             <Input
               type="email"
+              required
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               placeholder="admin@clinica.example"
@@ -508,53 +677,40 @@ export function PromoteMemberButton({
           </div>
           <div className="space-y-1.5">
             <Label>Rol</Label>
-            <Select value={role} onValueChange={(v) => setRole(v as typeof role)}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="sede_admin">{ROLE_LABELS.sede_admin}</SelectItem>
-                <SelectItem value="org_admin">{ROLE_LABELS.org_admin}</SelectItem>
-              </SelectContent>
-            </Select>
+            <select
+              value={role}
+              onChange={(e) => setRole(e.target.value as typeof role)}
+              className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm"
+            >
+              <option value="sede_admin">{ROLE_LABELS.sede_admin}</option>
+              <option value="org_admin">{ROLE_LABELS.org_admin}</option>
+            </select>
           </div>
           <div className="space-y-1.5">
             <Label>Sede (opcional)</Label>
-            <Select value={sedeId} onValueChange={setSedeId}>
-              <SelectTrigger><SelectValue placeholder="Toda la organización" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="">Toda la organización</SelectItem>
-                {sedes.map((s) => (
-                  <SelectItem key={s.id} value={s.id}>{s.nombre}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <select
+              value={sedeId}
+              onChange={(e) => setSedeId(e.target.value)}
+              className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm"
+            >
+              <option value="">Toda la organización</option>
+              {sedes.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.nombre}
+                </option>
+              ))}
+            </select>
           </div>
-        </div>
-        <DialogFooter>
-          <Button variant="ghost" onClick={() => setOpen(false)}>Cancelar</Button>
-          <Button
-            disabled={pending || !email}
-            onClick={() =>
-              start(async () => {
-                const r = await promoteToOrgAdminAction(
-                  orgId,
-                  email,
-                  role,
-                  sedeId || null,
-                );
-                if (r?.error) toast.error(r.error);
-                else {
-                  toast.success("Administrador asignado");
-                  setOpen(false);
-                  setEmail("");
-                  router.refresh();
-                }
-              })
-            }
-          >
-            {pending && <Loader2 className="h-4 w-4 animate-spin" />}
-            Asignar
-          </Button>
-        </DialogFooter>
+          <DialogFooter>
+            <Button type="button" variant="ghost" onClick={() => setOpen(false)}>
+              Cancelar
+            </Button>
+            <Button type="submit" disabled={pending || !email}>
+              {pending && <Loader2 className="h-4 w-4 animate-spin" />}
+              Asignar
+            </Button>
+          </DialogFooter>
+        </form>
       </DialogContent>
     </Dialog>
   );

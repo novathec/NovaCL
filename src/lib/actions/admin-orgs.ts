@@ -63,10 +63,20 @@ export async function createOrganizationAction(
   });
   if (!parsed.success) {
     const fieldErrors: Record<string, string> = {};
+    const detail: string[] = [];
     for (const issue of parsed.error.issues) {
-      fieldErrors[issue.path[0] as string] = issue.message;
+      const key = issue.path[0] as string;
+      fieldErrors[key] = issue.message;
+      detail.push(`${key}: ${issue.message}`);
     }
-    return { error: "Revisa los campos.", fieldErrors };
+    console.error("createOrganizationAction validation failed", {
+      raw: Object.fromEntries(formData.entries()),
+      issues: parsed.error.issues,
+    });
+    return {
+      error: `Revisa los campos: ${detail.join("; ")}`,
+      fieldErrors,
+    };
   }
   const data = parsed.data;
 
