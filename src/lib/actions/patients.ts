@@ -23,22 +23,69 @@ export async function searchPatientsAction(q: string) {
   return data ?? [];
 }
 
-const patientSchema = z.object({
-  tipo_documento: z.string().min(1),
-  numero_documento: z.string().min(1, "Documento requerido"),
-  nombres: z.string().min(1, "Nombres requeridos"),
-  apellidos: z.string().min(1, "Apellidos requeridos"),
-  fecha_nacimiento: z.string().optional().nullable(),
-  sexo: z.enum(["M", "F", "otro", "desconocido"]),
-  telefono: z.string().optional().nullable(),
-  email: z.string().email("Email inválido").optional().or(z.literal("")),
-  direccion: z.string().optional().nullable(),
-  grupo_sanguineo: z.string().optional().nullable(),
-  alergias: z.string().optional().nullable(),
-  antecedentes: z.string().optional().nullable(),
-  seguro: z.string().optional().nullable(),
-  contacto_emergencia: z.string().optional().nullable(),
-});
+const patientSchema = z
+  .discriminatedUnion("tipo_documento", [
+    z.object({
+      tipo_documento: z.literal("DNI"),
+      numero_documento: z
+        .string()
+        .min(1, "Documento requerido")
+        .regex(/^\d{8}$/, "DNI debe tener 8 dígitos"),
+    }),
+    z.object({
+      tipo_documento: z.literal("CE"),
+      numero_documento: z
+        .string()
+        .min(1, "Documento requerido")
+        .regex(/^[A-Za-z0-9]{6,12}$/, "CE debe tener 6-12 caracteres alfanuméricos"),
+    }),
+    z.object({
+      tipo_documento: z.literal("PAS"),
+      numero_documento: z
+        .string()
+        .min(1, "Documento requerido")
+        .regex(/^[A-Za-z0-9]{6,9}$/, "Pasaporte debe tener 6-9 caracteres alfanuméricos"),
+    }),
+    z.object({
+      tipo_documento: z.literal("OTRO"),
+      numero_documento: z
+        .string()
+        .min(3, "Mínimo 3 caracteres")
+        .max(40, "Máximo 40 caracteres"),
+    }),
+  ])
+  .and(
+    z.object({
+      nombres: z.string().min(1, "Nombres requeridos"),
+      apellidos: z.string().min(1, "Apellidos requeridos"),
+      fecha_nacimiento: z
+        .string()
+        .optional()
+        .nullable()
+        .refine((f) => !f || (Date.parse(f) < Date.now() && Date.parse(f) > Date.parse("1900-01-01")), {
+          message: "Fecha inválida",
+        }),
+      sexo: z.enum(["M", "F", "otro", "desconocido"]),
+      telefono: z
+        .string()
+        .optional()
+        .nullable()
+        .refine((v) => !v || /^9\d{8}$/.test(v), {
+          message: "Teléfono debe comenzar con 9 y tener 9 dígitos",
+        }),
+      email: z.string().email("Email inválido").optional().or(z.literal("")),
+      direccion: z.string().optional().nullable(),
+      grupo_sanguineo: z.string().optional().nullable(),
+      alergias: z.string().optional().nullable(),
+      antecedentes: z.string().optional().nullable(),
+      seguro: z.string().optional().nullable(),
+      contacto_emergencia: z
+        .string()
+        .max(200, "Máximo 200 caracteres")
+        .optional()
+        .nullable(),
+    })
+  );
 
 export type PatientFormState =
   | { error?: string; fieldErrors?: Record<string, string>; ok?: boolean; id?: string }
@@ -82,17 +129,24 @@ export async function savePatientAction(
     seguro: data.seguro || null,
     contacto_emergencia: data.contacto_emergencia || null,
   };
-
   const query = id
     ? supabase.from("LIS_patients").update(payload).eq("id", id).select("id").single()
     : supabase.from("LIS_patients").insert(payload).select("id").single();
 
   const { data: saved, error } = await query;
   if (error) {
+    console.error("savePatientAction insert/update failed", {
+      code: error.code,
+      message: error.message,
+      details: error.details,
+      hint: error.hint,
+      payload: { ...payload, numero_documento: payload.numero_documento ? "***" : null },
+    });
     return {
-      error: error.code === "23505"
-        ? "Ya existe un paciente con ese documento."
-        : "No se pudo guardar el paciente.",
+      error:
+        error.code === "23505"
+          ? "Ya existe un paciente con ese documento."
+          : `No se pudo guardar el paciente (${error.code ?? error.message}).`,
     };
   }
 

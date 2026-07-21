@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { z } from "zod";
 import { createClient, createAdminClient } from "@/lib/supabase/server";
 import { getSessionContext, hasRole } from "@/lib/auth/session";
 import type { Role } from "@/lib/database.types";
@@ -12,6 +13,27 @@ async function requireOrgAdmin() {
   }
   return ctx;
 }
+
+const phoneSchema = z
+  .string()
+  .trim()
+  .regex(/^9\d{8}$/, "Teléfono debe tener 9 dígitos y comenzar con 9")
+  .optional()
+  .or(z.literal(""));
+
+const emailSchema = z
+  .string()
+  .trim()
+  .email("Email inválido")
+  .optional()
+  .or(z.literal(""));
+
+const colegiaturaSchema = z
+  .string()
+  .trim()
+  .regex(/^[A-Za-z0-9]{4,10}$/, "Número de colegiatura inválido")
+  .optional()
+  .or(z.literal(""));
 
 // ── Sedes ────────────────────────────────────────────────────
 export async function createSedeAction(_prev: unknown, formData: FormData) {
@@ -97,6 +119,10 @@ export async function saveBillingAction(_prev: unknown, formData: FormData) {
   const autoInvoice = formData.get("auto_invoice") === "on";
   const autoDeliver = formData.get("auto_deliver") === "on";
 
+  if (!Number.isFinite(igv) || igv < 0 || igv > 1) {
+    return { error: "IGV debe estar entre 0 y 1." };
+  }
+
   const supabase = await createClient();
   const { error } = await supabase
     .from("LIS_billing_integrations")
@@ -181,16 +207,33 @@ export async function saveProfessionalAction(_prev: unknown, formData: FormData)
   const tipo = String(formData.get("tipo") ?? "medico");
   if (!nombres || !apellidos) return { error: "Nombres y apellidos son obligatorios." };
 
+  const telefonoRaw = String(formData.get("telefono") ?? "").trim();
+  const emailRaw = String(formData.get("email") ?? "").trim();
+  const colegiaturaRaw = String(formData.get("numero_colegiatura") ?? "").trim();
+
+  if (telefonoRaw) {
+    const r = phoneSchema.safeParse(telefonoRaw);
+    if (!r.success) return { error: "Teléfono debe tener 9 dígitos y comenzar con 9." };
+  }
+  if (emailRaw) {
+    const r = emailSchema.safeParse(emailRaw);
+    if (!r.success) return { error: "Email inválido." };
+  }
+  if (colegiaturaRaw) {
+    const r = colegiaturaSchema.safeParse(colegiaturaRaw);
+    if (!r.success) return { error: "Número de colegiatura inválido (4-10 caracteres alfanuméricos)." };
+  }
+
   const payload = {
     organization_id: ctx.activeOrgId!,
     tipo,
     nombres,
     apellidos,
-    numero_colegiatura: String(formData.get("numero_colegiatura") ?? "").trim() || null,
+    numero_colegiatura: colegiaturaRaw || null,
     colegio: String(formData.get("colegio") ?? "").trim() || null,
     especialidad: String(formData.get("especialidad") ?? "").trim() || null,
-    telefono: String(formData.get("telefono") ?? "").trim() || null,
-    email: String(formData.get("email") ?? "").trim() || null,
+    telefono: telefonoRaw || null,
+    email: emailRaw || null,
     externo: formData.get("externo") === "on",
   };
 

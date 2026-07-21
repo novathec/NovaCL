@@ -166,7 +166,14 @@ export function CreateOrganizationButton() {
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="ruc">RUC / Identificación fiscal</Label>
-            <Input id="ruc" name="ruc" placeholder="20123456789" />
+            <Input
+              id="ruc"
+              name="ruc"
+              placeholder="20123456789"
+              inputMode="numeric"
+              pattern="\d{11}"
+              maxLength={11}
+            />
           </div>
           <div className="space-y-1.5 sm:col-span-2">
             <Label htmlFor="logo_url">Logo (URL)</Label>
@@ -268,7 +275,14 @@ export function EditOrganizationButton({
           </div>
           <div className="space-y-1.5">
             <Label htmlFor={`ruc-${org.id}`}>RUC</Label>
-            <Input id={`ruc-${org.id}`} name="ruc" defaultValue={org.ruc ?? ""} />
+            <Input
+              id={`ruc-${org.id}`}
+              name="ruc"
+              defaultValue={org.ruc ?? ""}
+              inputMode="numeric"
+              pattern="\d{11}"
+              maxLength={11}
+            />
           </div>
           <div className="space-y-1.5 sm:col-span-2">
             <Label htmlFor={`logo-${org.id}`}>Logo (URL)</Label>
@@ -424,7 +438,14 @@ export function CreateSedeButton({ orgId }: { orgId: string }) {
           </div>
           <div className="space-y-1.5">
             <Label htmlFor={`tel-${orgId}`}>Teléfono</Label>
-            <Input id={`tel-${orgId}`} name="telefono" />
+            <Input
+              id={`tel-${orgId}`}
+              name="telefono"
+              type="tel"
+              inputMode="numeric"
+              pattern="^9\d{8}$"
+              maxLength={9}
+            />
           </div>
           <div className="space-y-1.5">
             <Label htmlFor={`mail-${orgId}`}>Email</Label>
@@ -522,7 +543,15 @@ export function EditSedeButton({
           </div>
           <div className="space-y-1.5">
             <Label htmlFor={`tl-${sede.id}`}>Teléfono</Label>
-            <Input id={`tl-${sede.id}`} name="telefono" defaultValue={sede.telefono ?? ""} />
+            <Input
+              id={`tl-${sede.id}`}
+              name="telefono"
+              defaultValue={sede.telefono ?? ""}
+              type="tel"
+              inputMode="numeric"
+              pattern="^9\d{8}$"
+              maxLength={9}
+            />
           </div>
           <div className="space-y-1.5">
             <Label htmlFor={`em-${sede.id}`}>Email</Label>

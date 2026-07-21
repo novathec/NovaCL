@@ -173,7 +173,23 @@ export function AnalyteDialog({
           <DialogTitle>{analyte ? "Editar analito" : "Nuevo analito"}</DialogTitle>
           <DialogDescription>Parámetro medible (p. ej. Hemoglobina).</DialogDescription>
         </DialogHeader>
-        <form action={action} className="space-y-4">
+        <form
+          action={action}
+          onSubmit={(e) => {
+            const form = e.currentTarget;
+            const vMin = String((form.elements.namedItem("valor_min") as HTMLInputElement | null)?.value ?? "");
+            const vMax = String((form.elements.namedItem("valor_max") as HTMLInputElement | null)?.value ?? "");
+            if (vMin && vMax) {
+              const minN = Number(vMin);
+              const maxN = Number(vMax);
+              if (Number.isFinite(minN) && Number.isFinite(maxN) && minN > maxN) {
+                e.preventDefault();
+                toast.error("Rango inválido");
+              }
+            }
+          }}
+          className="space-y-4"
+        >
           {analyte && <input type="hidden" name="id" value={analyte.id} />}
           <input type="hidden" name="value_type" value={valueType} />
           <div className="grid grid-cols-3 gap-3">

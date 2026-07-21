@@ -12,7 +12,12 @@ const orgSchema = z.object({
     .min(2)
     .max(60)
     .regex(/^[a-z0-9-]+$/, "Solo letras minúsculas, números y guiones"),
-  ruc: z.string().trim().max(20).optional().or(z.literal("")),
+  ruc: z
+    .string()
+    .trim()
+    .regex(/^\d{11}$/, "RUC debe tener 11 dígitos")
+    .optional()
+    .or(z.literal("")),
   logo_url: z.string().trim().url().optional().or(z.literal("")),
   timezone: z.string().min(3).max(60),
   locale: z.string().min(2).max(10),
@@ -21,10 +26,19 @@ const orgSchema = z.object({
 
 const sedeSchema = z.object({
   organization_id: z.string().uuid(),
-  codigo: z.string().min(1).max(20),
+  codigo: z
+    .string()
+    .min(1)
+    .max(20)
+    .regex(/^[A-Z0-9-]+$/, "Solo mayúsculas, números y guiones"),
   nombre: z.string().min(2).max(120),
   direccion: z.string().trim().max(200).optional().or(z.literal("")),
-  telefono: z.string().trim().max(40).optional().or(z.literal("")),
+  telefono: z
+    .string()
+    .trim()
+    .regex(/^9\d{8}$/, "Teléfono debe tener 9 dígitos y comenzar con 9")
+    .optional()
+    .or(z.literal("")),
   email: z.string().trim().email().optional().or(z.literal("")),
   es_procesadora: z.boolean(),
   activo: z.boolean(),

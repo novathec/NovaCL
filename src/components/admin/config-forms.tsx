@@ -240,7 +240,15 @@ export function BillingForm({
         </div>
         <div className="space-y-2">
           <Label htmlFor="igv">IGV (ej. 0.18)</Label>
-          <Input id="igv" name="igv" type="number" step="0.01" defaultValue={igv} />
+          <Input
+            id="igv"
+            name="igv"
+            type="number"
+            step="0.01"
+            min={0}
+            max={1}
+            defaultValue={igv}
+          />
         </div>
       </div>
       <label className="flex items-center gap-2 text-sm">

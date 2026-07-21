@@ -120,7 +120,15 @@ function ProfessionalForm({ professional, onDone }: { professional?: Professiona
         </div>
         <div className="space-y-2">
           <Label htmlFor="telefono">Teléfono</Label>
-          <Input id="telefono" name="telefono" defaultValue={professional?.telefono ?? ""} />
+          <Input
+            id="telefono"
+            name="telefono"
+            type="tel"
+            inputMode="numeric"
+            pattern="^9\d{8}$"
+            maxLength={9}
+            defaultValue={professional?.telefono ?? ""}
+          />
         </div>
       </div>
 

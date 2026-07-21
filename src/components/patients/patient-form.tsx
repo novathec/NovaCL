@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useEffect } from "react";
+import { useActionState, useEffect, useState } from "react";
 import { useFormStatus } from "react-dom";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
@@ -17,6 +17,13 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import type { Tables } from "@/lib/database.types";
+
+const DOC_PATTERNS: Record<string, string> = {
+  DNI: "\\d{8}",
+  CE: "[A-Za-z0-9]{6,12}",
+  PAS: "[A-Za-z0-9]{6,9}",
+  OTRO: ".{3,40}",
+};
 
 function Submit({ edit }: { edit: boolean }) {
   const { pending } = useFormStatus();
@@ -40,6 +47,8 @@ export function PatientForm({
     savePatientAction,
     undefined
   );
+  const [tipoDoc, setTipoDoc] = useState<string>(patient?.tipo_documento ?? "DNI");
+  const today = new Date().toISOString().slice(0, 10);
 
   useEffect(() => {
     if (state?.ok && state.id) {
@@ -50,6 +59,7 @@ export function PatientForm({
   }, [state, onDone, patient, router]);
 
   const fe = state?.fieldErrors ?? {};
+  const docPattern = DOC_PATTERNS[tipoDoc];
 
   return (
     <form action={action} className="space-y-4">
@@ -58,7 +68,10 @@ export function PatientForm({
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="space-y-2">
           <Label htmlFor="tipo_documento">Tipo de documento</Label>
-          <Select name="tipo_documento" defaultValue={patient?.tipo_documento ?? "DNI"}>
+          <Select
+            value={tipoDoc}
+            onValueChange={setTipoDoc}
+          >
             <SelectTrigger id="tipo_documento">
               <SelectValue />
             </SelectTrigger>
@@ -69,10 +82,18 @@ export function PatientForm({
               <SelectItem value="OTRO">Otro</SelectItem>
             </SelectContent>
           </Select>
+          <input type="hidden" name="tipo_documento" value={tipoDoc} />
         </div>
         <div className="space-y-2">
           <Label htmlFor="numero_documento">Número de documento</Label>
-          <Input id="numero_documento" name="numero_documento" defaultValue={patient?.numero_documento} required />
+          <Input
+            id="numero_documento"
+            name="numero_documento"
+            defaultValue={patient?.numero_documento}
+            required
+            inputMode={tipoDoc === "OTRO" ? "text" : "numeric"}
+            pattern={docPattern}
+          />
           {fe.numero_documento && <p className="text-xs text-destructive">{fe.numero_documento}</p>}
         </div>
       </div>
@@ -93,7 +114,14 @@ export function PatientForm({
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="space-y-2">
           <Label htmlFor="fecha_nacimiento">Fecha de nacimiento</Label>
-          <Input id="fecha_nacimiento" name="fecha_nacimiento" type="date" defaultValue={patient?.fecha_nacimiento ?? ""} />
+          <Input
+            id="fecha_nacimiento"
+            name="fecha_nacimiento"
+            type="date"
+            defaultValue={patient?.fecha_nacimiento ?? ""}
+            min="1900-01-01"
+            max={today}
+          />
         </div>
         <div className="space-y-2">
           <Label htmlFor="sexo">Sexo</Label>
@@ -114,7 +142,16 @@ export function PatientForm({
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="space-y-2">
           <Label htmlFor="telefono">Teléfono</Label>
-          <Input id="telefono" name="telefono" defaultValue={patient?.telefono ?? ""} />
+          <Input
+            id="telefono"
+            name="telefono"
+            type="tel"
+            inputMode="numeric"
+            pattern="^9\d{8}$"
+            maxLength={9}
+            defaultValue={patient?.telefono ?? ""}
+          />
+          {fe.telefono && <p className="text-xs text-destructive">{fe.telefono}</p>}
         </div>
         <div className="space-y-2">
           <Label htmlFor="email">Email</Label>

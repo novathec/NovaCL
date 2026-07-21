@@ -50,6 +50,14 @@ export async function saveAnalyteAction(_prev: unknown, formData: FormData) {
 
   if (!codigo || !nombre) return { error: "Código y nombre son obligatorios." };
 
+  if (valorMin && valorMax) {
+    const minN = Number(valorMin);
+    const maxN = Number(valorMax);
+    if (Number.isFinite(minN) && Number.isFinite(maxN) && minN > maxN) {
+      return { error: "El valor mínimo no puede ser mayor que el valor máximo." };
+    }
+  }
+
   const supabase = await createClient();
   const payload = {
     organization_id: ctx.activeOrgId!,

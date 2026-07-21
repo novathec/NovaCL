@@ -35,6 +35,7 @@ export function ItemDialog({ orgId, item }: { orgId: string; item?: Item }) {
   const [pending, startTransition] = useTransition();
 
   const [codigo, setCodigo] = useState(item?.codigo ?? "");
+  const [codigoBarras, setCodigoBarras] = useState(item?.codigo_barras ?? "");
   const [nombre, setNombre] = useState(item?.nombre ?? "");
   const [descripcion, setDescripcion] = useState(item?.descripcion ?? "");
   const [categoria, setCategoria] = useState(item?.categoria ?? "");
@@ -53,6 +54,7 @@ export function ItemDialog({ orgId, item }: { orgId: string; item?: Item }) {
       const res = await saveItemAction({
         id: item?.id,
         codigo,
+        codigo_barras: codigoBarras,
         nombre,
         descripcion,
         categoria,
@@ -96,6 +98,14 @@ export function ItemDialog({ orgId, item }: { orgId: string; item?: Item }) {
           <div className="space-y-2">
             <Label>Código</Label>
             <Input value={codigo} onChange={(e) => setCodigo(e.target.value)} placeholder="RE-001" />
+          </div>
+          <div className="space-y-2">
+            <Label>Código de barras</Label>
+            <Input
+              value={codigoBarras}
+              onChange={(e) => setCodigoBarras(e.target.value)}
+              placeholder="EAN-13, GS1, etc."
+            />
           </div>
           <div className="space-y-2">
             <Label>Nombre</Label>
