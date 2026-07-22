@@ -1164,7 +1164,7 @@ function ReprogramarDialog({ cita, onClose }: { cita: Cita | null; onClose: () =
         <div className="grid grid-cols-2 gap-3">
           <div className="space-y-2">
             <Label htmlFor="rep-fecha">Fecha</Label>
-            <Input id="rep-fecha" type="date" value={fecha} onChange={(e) => setFecha(e.target.value)} />
+            <Input id="rep-fecha" type="date" min={new Date().toLocaleDateString("en-CA")} value={fecha} onChange={(e) => setFecha(e.target.value)} />
           </div>
           <div className="space-y-2">
             <Label htmlFor="rep-hora">Hora</Label>

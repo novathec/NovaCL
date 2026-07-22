@@ -12,12 +12,14 @@ export async function signInAction(_prev: ActionState, formData: FormData): Prom
   const email = String(formData.get("email") ?? "").trim();
   const password = String(formData.get("password") ?? "");
   const next = String(formData.get("next") ?? "/dashboard");
+  // Anti open-redirect: solo rutas internas ("//" también es externa).
+  const safeNext = next.startsWith("/") && !next.startsWith("//") ? next : "/dashboard";
 
   const supabase = await createClient();
   const { error } = await supabase.auth.signInWithPassword({ email, password });
   if (error) return { error: "Credenciales inválidas. Verifica tu correo y contraseña." };
 
-  redirect(next || "/dashboard");
+  redirect(safeNext);
 }
 
 export async function signOutAction() {

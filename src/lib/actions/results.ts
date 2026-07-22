@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getSessionContext } from "@/lib/auth/session";
 import { hasRole } from "@/lib/auth/session";
 import { finalizeCompletedOrder, type FinalizeSummary } from "@/lib/automation";
+import { friendlyDbError, rpcError } from "@/lib/errors";
 
 export type ResultInput = {
   orderItemId: string;
@@ -105,19 +106,32 @@ export async function recordCriticalNotificationAction(
   notificadoAId?: string
 ) {
   const ctx = await getSessionContext();
+  if (!hasRole(ctx.roles, ["org_admin", "sede_admin", "analista", "validador"])) {
+    return { error: "No autorizado para registrar avisos críticos." };
+  }
   if (!notificadoA.trim()) return { error: "Indica a quién se avisó." };
   const supabase = await createClient();
+
+  // La orden debe pertenecer a la organización activa
+  const { data: order } = await supabase
+    .from("LIS_orders")
+    .select("id")
+    .eq("id", orderId)
+    .eq("organization_id", ctx.activeOrgId!)
+    .maybeSingle();
+  if (!order) return { error: "Orden no encontrada." };
+
   const { error } = await supabase.from("LIS_critical_notifications").insert({
     organization_id: ctx.activeOrgId!,
     order_id: orderId,
-    analitos: criticos,
-    notificado_a: notificadoA.trim(),
+    analitos: criticos.slice(0, 50),
+    notificado_a: notificadoA.trim().slice(0, 200),
     notificado_a_id: notificadoAId || null,
     medio,
-    nota: nota?.trim() || null,
+    nota: nota?.trim().slice(0, 500) || null,
     notificado_por: ctx.user.id,
   });
-  if (error) return { error: error.message };
+  if (error) return { error: friendlyDbError(error, "No se pudo registrar el aviso.") };
   revalidatePath(`/ordenes/${orderId}`);
   return { ok: true };
 }
@@ -156,7 +170,7 @@ export async function saveResultsAction(orderId: string, inputs: ResultInput[]) 
       p_nota: r.nota ?? null,
       p_validar: false,
     });
-    if (error) return { error: error.message };
+    if (error) return { error: rpcError(error, "No se pudo guardar el resultado.") };
   }
   const [criticos, deltas] = await Promise.all([
     findCriticals(supabase, inputs),
@@ -187,7 +201,7 @@ export async function validateResultsAction(orderId: string, inputs: ResultInput
       p_nota: r.nota ?? null,
       p_validar: true,
     });
-    if (error) return { error: error.message };
+    if (error) return { error: rpcError(error, "No se pudo validar el resultado.") };
   }
 
   const [criticos, deltas] = await Promise.all([

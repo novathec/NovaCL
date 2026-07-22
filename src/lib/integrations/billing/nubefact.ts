@@ -57,8 +57,21 @@ export class NubefactProvider implements BillingProvider {
       (this.cfg.config.nubefact_token as string | undefined) ??
       process.env.NUBEFACT_TOKEN;
 
-    // Sin credenciales → simulación (misma convención que Wally)
+    // Sin credenciales → simulación SOLO en desarrollo (misma convención
+    // que Wally). En producción se rechaza para no registrar comprobantes
+    // fiscales falsos.
     if (!ruta || !token || token === "your-nubefact-token") {
+      if (process.env.NODE_ENV === "production") {
+        return {
+          ok: false,
+          serie,
+          numero: String(numero),
+          subtotal,
+          impuestos,
+          total,
+          error: "Facturación no configurada: faltan credenciales del proveedor (NubeFact).",
+        };
+      }
       return {
         ok: true,
         externalId: `${serie}-${numero}`,

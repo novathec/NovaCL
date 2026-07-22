@@ -20,16 +20,31 @@ export class WallyProvider implements BillingProvider {
   constructor(private readonly cfg: BillingProviderConfig) {}
 
   async emitInvoice(req: BillingRequest): Promise<BillingResult> {
-    const subtotal = req.lineas.reduce((s, l) => s + l.cantidad * l.precio_unitario, 0);
     const igvRate = Number(this.cfg.config.igv ?? IGV_RATE);
-    const impuestos = +(subtotal * igvRate).toFixed(2);
-    const total = +(subtotal + impuestos).toFixed(2);
+    // Convención única del sistema: los precios del catálogo INCLUYEN IGV —
+    // se desglosa para el comprobante (igual que el adaptador NubeFact).
+    const total = +req.lineas
+      .reduce((s, l) => s + l.cantidad * l.precio_unitario, 0)
+      .toFixed(2);
+    const subtotal = +(total / (1 + igvRate)).toFixed(2);
+    const impuestos = +(total - subtotal).toFixed(2);
 
     const baseUrl = this.cfg.apiBaseUrl ?? process.env.WALLY_API_BASE_URL;
     const apiKey = this.cfg.apiKey ?? process.env.WALLY_API_KEY;
 
-    // Sin credenciales → modo simulación (útil para demo/desarrollo).
+    // Sin credenciales → modo simulación (SOLO desarrollo/demo). En
+    // producción se falla ruidosamente: una factura simulada registrada
+    // como "emitida" es un documento fiscal falso.
     if (!baseUrl || !apiKey || apiKey === "your-wally-api-key") {
+      if (process.env.NODE_ENV === "production") {
+        return {
+          ok: false,
+          subtotal,
+          impuestos,
+          total,
+          error: "Facturación no configurada: faltan credenciales del proveedor (Wally).",
+        };
+      }
       return {
         ok: true,
         externalId: `SIM-${Date.now()}`,

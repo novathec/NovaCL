@@ -135,12 +135,12 @@ export function SamplesPanel({
               </p>
               {canTake && s.status !== "procesada" && s.status !== "rechazada" && (
                 <div className="mt-2 flex gap-2">
-                  {s.status === "tomada" && (
+                  {(s.status === "tomada" || s.status === "en_transito") && (
                     <Button size="sm" variant="outline" onClick={() => advance(s.id, "recibida")} disabled={pending}>
                       Recibir
                     </Button>
                   )}
-                  {(s.status === "recibida" || s.status === "en_transito") && (
+                  {s.status === "recibida" && (
                     <Button size="sm" variant="outline" onClick={() => advance(s.id, "en_analisis")} disabled={pending}>
                       En análisis
                     </Button>

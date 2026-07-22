@@ -86,6 +86,10 @@ export function ResultsEntry({
     const inputs: ResultInput[] = [];
     for (const g of groups) {
       for (const a of g.analytes) {
+        // Los resultados ya validados nunca se reenvían: un guardado de
+        // borrador no puede revertir una firma (la BD también lo rechaza);
+        // una corrección exige pasar de nuevo por "Validar y firmar".
+        if (a.status === "validado") continue;
         const key = `${g.orderItemId}:${a.analyteId}`;
         const raw = values[key]?.trim() ?? "";
         if (raw === "") continue;

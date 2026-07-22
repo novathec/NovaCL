@@ -4,19 +4,36 @@ import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { getSessionContext } from "@/lib/auth/session";
+import { friendlyDbError } from "@/lib/errors";
+
+/**
+ * Sanitiza el término de búsqueda antes de interpolarlo en un filtro `.or()`
+ * de PostgREST: los caracteres de sintaxis ( , ) . " \ y los comodines % _
+ * pueden romper o alterar la lógica del filtro.
+ */
+function sanitizeSearchTerm(q: string): string {
+  return q
+    .replace(/[(),."\\%_]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 80);
+}
 
 export async function searchPatientsAction(q: string) {
   const ctx = await getSessionContext();
   const supabase = await createClient();
+  const term = sanitizeSearchTerm(q);
+  if (q && !term) return []; // el término quedó vacío tras sanitizar
+
   let query = supabase
     .from("LIS_patients")
     .select("id,nombres,apellidos,tipo_documento,numero_documento,sexo,fecha_nacimiento")
     .eq("organization_id", ctx.activeOrgId!)
     .order("apellidos")
     .limit(10);
-  if (q) {
+  if (term) {
     query = query.or(
-      `nombres.ilike.%${q}%,apellidos.ilike.%${q}%,numero_documento.ilike.%${q}%`
+      `nombres.ilike.%${term}%,apellidos.ilike.%${term}%,numero_documento.ilike.%${term}%`
     );
   }
   const { data } = await query;
@@ -152,7 +169,7 @@ export async function savePatientAction(
       error:
         error.code === "23505"
           ? "Ya existe un paciente con ese documento."
-          : `No se pudo guardar el paciente (${error.code ?? error.message}).`,
+          : friendlyDbError(error, "No se pudo guardar el paciente."),
     };
   }
 

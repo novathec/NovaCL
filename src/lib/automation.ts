@@ -10,7 +10,7 @@ export type FinalizeSummary = {
   /** Resultado de la auto-facturación (solo si el toggle está activo). */
   invoice?: "emitida" | "error" | "ya_existia";
   /** Resultado de la auto-entrega (solo si el toggle está activo). */
-  delivery?: "enviada" | "error";
+  delivery?: "enviada" | "error" | "ya_existia";
 };
 
 /**
@@ -74,47 +74,58 @@ export async function finalizeCompletedOrder(
   // 3) Auto-entrega (opt-in por organización): email si hay correo, si no portal.
   if (cfg.auto_deliver === true) {
     try {
-      const email = (order.patients as unknown as { email: string | null } | null)?.email ?? null;
-      const canal = email ? "email" : "portal";
-      const expira = new Date();
-      expira.setDate(expira.getDate() + 30);
-
-      const { data: delivery, error } = await admin
+      // Dedup: no generar tokens/emails duplicados si la orden ya tiene una
+      // entrega activa (re-validación tras corrección o doble validación).
+      const { count: previas } = await admin
         .from("LIS_result_deliveries")
-        .insert({
-          organization_id: order.organization_id,
-          order_id: orderId,
-          canal,
-          destino: email,
-          status: "pendiente",
-          token_expira_at: expira.toISOString(),
-          enviado_por: actorId,
-        })
-        .select("id, access_token")
-        .single();
-      if (error) throw new Error(error.message);
+        .select("id", { count: "exact", head: true })
+        .eq("order_id", orderId)
+        .neq("status", "fallido");
+      if (previas && previas > 0) {
+        summary.delivery = "ya_existia";
+      } else {
+        const email = (order.patients as unknown as { email: string | null } | null)?.email ?? null;
+        const canal = email ? "email" : "portal";
+        const expira = new Date();
+        expira.setDate(expira.getDate() + 30);
 
-      const portalBase = process.env.RESULTS_PUBLIC_BASE_URL ?? "http://localhost:3000/portal";
-      const link = `${portalBase}/${delivery.access_token}`;
+        const { data: delivery, error } = await admin
+          .from("LIS_result_deliveries")
+          .insert({
+            organization_id: order.organization_id,
+            order_id: orderId,
+            canal,
+            destino: email,
+            status: "pendiente",
+            token_expira_at: expira.toISOString(),
+            enviado_por: actorId,
+          })
+          .select("id, access_token")
+          .single();
+        if (error) throw new Error(error.message);
 
-      let sent = true;
-      let errorDetalle: string | null = null;
-      if (canal === "email" && email) {
-        const res = await sendResultEmail(email, link);
-        sent = res.ok;
-        errorDetalle = res.error ?? null;
+        const portalBase = process.env.RESULTS_PUBLIC_BASE_URL ?? "http://localhost:3000/portal";
+        const link = `${portalBase}/${delivery.access_token}`;
+
+        let sent = true;
+        let errorDetalle: string | null = null;
+        if (canal === "email" && email) {
+          const res = await sendResultEmail(email, link);
+          sent = res.ok;
+          errorDetalle = res.error ?? null;
+        }
+
+        await admin
+          .from("LIS_result_deliveries")
+          .update({
+            status: sent ? "enviado" : "fallido",
+            enviado_at: sent ? new Date().toISOString() : null,
+            error_detalle: errorDetalle,
+          })
+          .eq("id", delivery.id);
+
+        summary.delivery = sent ? "enviada" : "error";
       }
-
-      await admin
-        .from("LIS_result_deliveries")
-        .update({
-          status: sent ? "enviado" : "fallido",
-          enviado_at: sent ? new Date().toISOString() : null,
-          error_detalle: errorDetalle,
-        })
-        .eq("id", delivery.id);
-
-      summary.delivery = sent ? "enviada" : "error";
     } catch {
       summary.delivery = "error";
     }

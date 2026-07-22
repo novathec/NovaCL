@@ -35,6 +35,21 @@ export async function emitInvoiceForOrder(
     enabled: integ?.enabled ?? true,
     config: (integ?.config as Record<string, unknown>) ?? {},
   };
+  if (!cfg.enabled) {
+    return { ok: false, error: "La integración de facturación está desactivada." };
+  }
+
+  // Idempotencia: no emitir un segundo comprobante activo para la misma
+  // orden (las filas anuladas o en error_sync no bloquean el reintento).
+  const { data: existente } = await supabase
+    .from("LIS_invoices")
+    .select("id")
+    .eq("order_id", orderId)
+    .not("status", "in", "(anulada,error_sync)")
+    .limit(1);
+  if (existente && existente.length > 0) {
+    return { ok: false, error: "La orden ya tiene un comprobante emitido." };
+  }
 
   const patient = order.patients as unknown as {
     nombres: string;
@@ -104,7 +119,16 @@ export async function emitInvoiceForOrder(
     .select("id")
     .single();
 
-  if (error) return { ok: false, error: error.message };
+  if (error) {
+    // 23505: colisión con el índice de unicidad (doble emisión concurrente)
+    return {
+      ok: false,
+      error:
+        error.code === "23505"
+          ? "La orden ya tiene un comprobante emitido (emisión concurrente detectada)."
+          : error.message,
+    };
+  }
 
   await supabase.from("LIS_invoice_events").insert({
     invoice_id: invoice.id,

@@ -463,6 +463,7 @@ create table public."LIS_orders" (
   medico_solicitante text,
   diagnostico       text,
   observaciones     text,
+  motivo_anulacion  text,
   moneda            text not null default 'PEN',
   total             numeric(12,2) not null default 0,
   created_by        uuid references public."LIS_profiles"(id) on delete set null,
@@ -581,6 +582,8 @@ language sql immutable
 as $$
   select case
     when p_valor is null then null
+    -- sin rango de referencia: el valor no fue evaluado, no se reporta normal
+    when p_min is null and p_max is null and p_cmin is null and p_cmax is null then null
     when p_cmin is not null and p_valor < p_cmin then 'critico_bajo'::app.result_flag
     when p_cmax is not null and p_valor > p_cmax then 'critico_alto'::app.result_flag
     when p_min  is not null and p_valor < p_min  then 'bajo'::app.result_flag
@@ -673,6 +676,15 @@ create table public."LIS_invoices" (
 );
 create index "LIS_idx_invoices_order" on public."LIS_invoices"(order_id);
 create index "LIS_idx_invoices_org" on public."LIS_invoices"(organization_id);
+-- Un solo comprobante activo por orden; correlativo único por serie
+-- (las filas anuladas o en error_sync no bloquean el reintento).
+create unique index "LIS_invoices_order_activa"
+  on public."LIS_invoices"(order_id)
+  where status not in ('anulada','error_sync');
+create unique index "LIS_invoices_serie_numero"
+  on public."LIS_invoices"(organization_id, provider, serie, numero)
+  where serie is not null and numero is not null
+    and status not in ('anulada','error_sync');
 create trigger trg_invoice_touch before update on public."LIS_invoices"
   for each row execute function app.touch_updated_at();
 
@@ -840,27 +852,39 @@ create trigger trg_recalc_order_total
 
 -- ─────────────────────────────────────────────────────────────
 -- Rollup: estado del item segun sus resultados
+-- El item solo es "validado" cuando TODOS los analitos configurados en
+-- LIS_study_analytes tienen resultado validado (no basta con los cargados).
 -- ─────────────────────────────────────────────────────────────
 create or replace function app.rollup_item_status()
 returns trigger
 language plpgsql
 as $$
 declare
-  v_item uuid := coalesce(new.order_item_id, old.order_item_id);
-  v_total int;
+  v_item      uuid := coalesce(new.order_item_id, old.order_item_id);
+  v_expected  int;
   v_validados int;
-  v_cargados int;
+  v_cargados  int;
 begin
-  select count(*),
-         count(*) filter (where status = 'validado'),
-         count(*) filter (where status in ('preliminar','validado','corregido'))
-    into v_total, v_validados, v_cargados
-  from public."LIS_results" where order_item_id = v_item;
+  -- analitos esperados según la composición del estudio del item
+  select count(*) into v_expected
+  from public."LIS_study_analytes" sa
+  join public."LIS_order_items" oi on oi.study_id = sa.study_id
+  where oi.id = v_item;
+
+  -- validados que corresponden a analitos del estudio + total cargados
+  select count(*) filter (where sa.analyte_id is not null and r.status = 'validado'),
+         count(*) filter (where r.status in ('preliminar','validado','corregido'))
+    into v_validados, v_cargados
+  from public."LIS_results" r
+  left join public."LIS_study_analytes" sa
+    on sa.analyte_id = r.analyte_id
+   and sa.study_id = (select oi.study_id from public."LIS_order_items" oi where oi.id = v_item)
+  where r.order_item_id = v_item;
 
   update public."LIS_order_items" oi
   set status = case
-    when v_total = 0 then 'pendiente'
-    when v_validados = v_total then 'validado'
+    when v_expected = 0 and v_cargados = 0 then 'pendiente'
+    when v_expected > 0 and v_validados >= v_expected then 'validado'
     when v_cargados > 0 then 'resultado_cargado'
     else 'en_proceso'
   end::app.item_status
@@ -899,7 +923,7 @@ begin
          count(*) filter (where status in ('pendiente','en_proceso','resultado_cargado'))
     into v_total, v_validados, v_pendientes
   from public."LIS_order_items"
-  where order_id = v_order and status <> 'anulado';
+  where order_id = v_order and status not in ('anulado','rechazado');
 
   update public."LIS_orders" o
   set status = case
@@ -919,6 +943,73 @@ create trigger trg_rollup_order_status
   for each row execute function app.rollup_order_status();
 
 -- ─────────────────────────────────────────────────────────────
+-- Máquina de estados de la orden: entregar solo si completada,
+-- anular siempre con motivo, estados terminales inmutables.
+-- ─────────────────────────────────────────────────────────────
+create or replace function app.guard_order_status()
+returns trigger
+language plpgsql
+as $$
+begin
+  if new.status is not distinct from old.status then
+    return new;
+  end if;
+  if old.status in ('entregada','anulada') then
+    raise exception 'una orden % no puede cambiar de estado', old.status;
+  end if;
+  if new.status = 'entregada' and old.status <> 'completada' then
+    raise exception 'solo se puede entregar una orden completada';
+  end if;
+  if new.status = 'anulada' and (new.motivo_anulacion is null or btrim(new.motivo_anulacion) = '') then
+    raise exception 'anular una orden requiere un motivo';
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists trg_order_status_guard on public."LIS_orders";
+create trigger trg_order_status_guard
+  before update of status on public."LIS_orders"
+  for each row execute function app.guard_order_status();
+
+-- ─────────────────────────────────────────────────────────────
+-- Máquina de estados de la muestra (flujo pre-analítico ordenado;
+-- rechazo siempre con motivo).
+-- ─────────────────────────────────────────────────────────────
+create or replace function app.guard_sample_status()
+returns trigger
+language plpgsql
+as $$
+begin
+  if new.status is not distinct from old.status then
+    return new;
+  end if;
+  if old.status in ('procesada','rechazada') then
+    raise exception 'una muestra % no puede cambiar de estado', old.status;
+  end if;
+  if new.status = 'rechazada'
+     and (new.motivo_rechazo is null or btrim(new.motivo_rechazo) = '') then
+    raise exception 'el rechazo de una muestra requiere un motivo';
+  end if;
+  if not (
+       (old.status = 'pendiente'   and new.status in ('tomada','rechazada'))
+    or (old.status = 'tomada'      and new.status in ('en_transito','recibida','rechazada'))
+    or (old.status = 'en_transito' and new.status in ('recibida','rechazada'))
+    or (old.status = 'recibida'    and new.status in ('en_analisis','rechazada'))
+    or (old.status = 'en_analisis' and new.status in ('procesada','rechazada'))
+  ) then
+    raise exception 'transicion de muestra no permitida: % → %', old.status, new.status;
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists trg_sample_status_guard on public."LIS_samples";
+create trigger trg_sample_status_guard
+  before update of status on public."LIS_samples"
+  for each row execute function app.guard_sample_status();
+
+-- ─────────────────────────────────────────────────────────────
 -- RPC: guardar un resultado calculando flag y rango automaticamente
 -- ─────────────────────────────────────────────────────────────
 create or replace function public.upsert_result(
@@ -934,6 +1025,7 @@ as $$
 declare
   v_org        uuid;
   v_patient_id uuid;
+  v_order_st   app.order_status;
   v_patient    "LIS_patients"%rowtype;
   v_analyte    "LIS_analytes"%rowtype;
   v_range      "LIS_reference_ranges"%rowtype;
@@ -942,13 +1034,19 @@ declare
   v_rango_txt  text;
   v_res        public."LIS_results";
 begin
-  select o.organization_id, o.patient_id into v_org, v_patient_id
+  select o.organization_id, o.patient_id, o.status
+    into v_org, v_patient_id, v_order_st
   from public."LIS_order_items" oi
   join public."LIS_orders" o on o.id = oi.order_id
   where oi.id = p_order_item_id;
 
   if v_org is null then
     raise exception 'order_item % no encontrado', p_order_item_id;
+  end if;
+
+  -- no se escriben resultados en ordenes terminales
+  if v_order_st in ('entregada','anulada') then
+    raise exception 'la orden esta %: no se pueden cargar resultados', v_order_st;
   end if;
 
   select * into v_patient
@@ -959,6 +1057,22 @@ begin
   if not (app.is_superadmin() or app.has_org_role(v_org,
        array['org_admin','sede_admin','analista','validador']::app.role[])) then
     raise exception 'no autorizado para cargar resultados';
+  end if;
+
+  -- la firma exige rol validador (segregacion de funciones)
+  if p_validar and not (app.is_superadmin() or app.has_org_role(v_org,
+       array['org_admin','sede_admin','validador']::app.role[])) then
+    raise exception 'no autorizado para validar resultados';
+  end if;
+
+  -- un resultado validado no se sobrescribe con un guardado sin firma
+  if not p_validar and exists (
+    select 1 from public."LIS_results" r
+    where r.order_item_id = p_order_item_id
+      and r.analyte_id = p_analyte_id
+      and r.status = 'validado'
+  ) then
+    raise exception 'el resultado ya esta validado: solo un validador puede corregirlo';
   end if;
 
   select * into v_analyte from public."LIS_analytes" where id = p_analyte_id;
@@ -977,6 +1091,13 @@ begin
   if p_valor_num is not null then
     v_flag := app.eval_flag(p_valor_num, v_range.valor_min, v_range.valor_max,
                             v_range.critico_min, v_range.critico_max);
+  elsif p_valor_texto is not null and v_range.texto_normal is not null then
+    -- evaluación cualitativa contra el texto de referencia
+    v_flag := case
+      when btrim(lower(p_valor_texto)) = btrim(lower(v_range.texto_normal))
+        then 'normal'::app.result_flag
+      else 'anormal'::app.result_flag
+    end;
   end if;
 
   if v_range.valor_min is not null or v_range.valor_max is not null then
@@ -1083,6 +1204,29 @@ create policy profile_select_self on public."LIS_profiles" for select to authent
   );
 create policy profile_update_self on public."LIS_profiles" for update to authenticated
   using (id = auth.uid()) with check (id = auth.uid());
+
+-- Proteccion de campos sensibles del perfil (es_superadmin / email):
+-- la policy anterior permite UPDATE de la propia fila; este trigger impide
+-- que un usuario se auto-otorgue superadmin o cambie su email.
+create or replace function app.protect_profile_sensitive()
+returns trigger
+language plpgsql
+as $$
+begin
+  if auth.uid() is not null and not app.is_superadmin() then
+    if new.es_superadmin is distinct from old.es_superadmin
+       or new.email is distinct from old.email then
+      raise exception 'no autorizado para modificar campos sensibles del perfil';
+    end if;
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists trg_profile_protect on public."LIS_profiles";
+create trigger trg_profile_protect
+  before update on public."LIS_profiles"
+  for each row execute function app.protect_profile_sensitive();
 
 -- ─────────────────────────────────────────────────────────────
 -- memberships
@@ -1260,6 +1404,29 @@ create policy invoiceevent_select on public."LIS_invoice_events" for select to a
     and i.organization_id in (select app.member_org_ids())));
 
 -- ─────────────────────────────────────────────────────────────
+-- DELETE restringido a administración en entidades críticas
+-- (policies RESTRICTIVE: se combinan con AND sobre las `*_write`)
+-- ─────────────────────────────────────────────────────────────
+create policy patient_delete_admin on public."LIS_patients"
+  as restrictive for delete to authenticated
+  using (app.can_admin_org(organization_id));
+create policy orderitem_delete_admin on public."LIS_order_items"
+  as restrictive for delete to authenticated
+  using (app.can_admin_org((select o.organization_id from public."LIS_orders" o where o.id = order_id)));
+create policy sample_delete_admin on public."LIS_samples"
+  as restrictive for delete to authenticated
+  using (app.can_admin_org(organization_id));
+create policy result_delete_admin on public."LIS_results"
+  as restrictive for delete to authenticated
+  using (app.can_admin_org(organization_id));
+create policy delivery_delete_admin on public."LIS_result_deliveries"
+  as restrictive for delete to authenticated
+  using (app.can_admin_org(organization_id));
+create policy invoice_delete_admin on public."LIS_invoices"
+  as restrictive for delete to authenticated
+  using (app.can_admin_org(organization_id));
+
+-- ─────────────────────────────────────────────────────────────
 -- Auditoria: lectura para admins/lectura; nunca escritura via API
 -- ─────────────────────────────────────────────────────────────
 create policy audit_select on public."LIS_audit_log" for select to authenticated
@@ -1336,6 +1503,14 @@ begin
     raise exception 'no autorizado para crear ordenes en esta sede';
   end if;
 
+  -- el paciente debe pertenecer a la organización de la sede
+  if not exists (
+    select 1 from public."LIS_patients" p
+    where p.id = p_patient_id and p.organization_id = v_org
+  ) then
+    raise exception 'paciente % no pertenece a la organizacion', p_patient_id;
+  end if;
+
   if p_medico_id is not null then
     if not exists (
       select 1 from public."LIS_professionals" p
@@ -1357,8 +1532,11 @@ begin
 
   for v_item in select * from jsonb_array_elements(p_items) loop
     select * into v_study from public."LIS_studies" where id = (v_item->>'study_id')::uuid;
-    if v_study.id is null then
-      raise exception 'estudio % no existe', v_item->>'study_id';
+    -- el estudio debe existir, estar activo y ser global o de la organización
+    if v_study.id is null
+       or (v_study.organization_id is not null and v_study.organization_id <> v_org)
+       or not v_study.activo then
+      raise exception 'estudio % no existe o no esta disponible', v_item->>'study_id';
     end if;
 
     select precio into v_precio from public."LIS_study_prices"

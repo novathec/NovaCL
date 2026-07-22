@@ -4,8 +4,6 @@ import { Lock } from "lucide-react";
 import { LoginForm } from "./login-form";
 import { LogoParticles } from "./logo-particles";
 
-
-
 export default function LoginPage() {
   return (
     // El login siempre usa el tema claro: "theme-light" redeclara las variables
@@ -26,125 +24,60 @@ export default function LoginPage() {
         aria-hidden
         className="pointer-events-none absolute inset-0 bg-linear-to-r from-[#02171c]/70 via-[#054048]/42 to-[#02171c]/52"
       />
-      {/* Foco: refuerza contraste detrás del isotipo (columna de marca) */}
+      {/* Viñeta radial: oscurece los bordes y concentra la luz en el centro,
+          donde vive la tarjeta, para que el vidrio destaque sobre la foto. */}
       <div
         aria-hidden
-        className="pointer-events-none absolute inset-y-0 left-0 hidden w-full lg:block lg:w-[56%]"
+        className="pointer-events-none absolute inset-0"
         style={{
           background:
-            "radial-gradient(ellipse 55% 52% at 32% 42%, rgba(1,10,13,0.85), transparent 68%)",
+            "radial-gradient(ellipse 62% 58% at 50% 46%, transparent 40%, rgba(1,10,13,0.62) 100%)",
         }}
       />
 
-      <div className="relative z-10 grid min-h-screen lg:grid-cols-[1.05fr_1fr]">
-        {/* Panel de marca */}
-        <div className="relative hidden flex-col items-center justify-center p-10 text-primary-foreground lg:flex xl:p-14">
-          {/* Retícula sutil */}
-          <div
-            aria-hidden
-            className="pointer-events-none absolute inset-0 opacity-[0.06]"
-            style={{
-              backgroundImage:
-                "linear-gradient(rgba(255,255,255,.6) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.6) 1px, transparent 1px)",
-              backgroundSize: "42px 42px",
-              maskImage:
-                "radial-gradient(ellipse 60% 55% at 35% 45%, black 40%, transparent 80%)",
-              WebkitMaskImage:
-                "radial-gradient(ellipse 60% 55% at 35% 45%, black 40%, transparent 80%)",
-            }}
-          />
-
-          {/* Isotipo y mensaje: centrados y ligeramente desplazados hacia
-              arriba para compensar visualmente el copyright inferior */}
-          <div className="relative z-10 flex -translate-y-6 flex-col items-center gap-9 text-center">
-          <div className="relative flex h-104 w-104 items-center justify-center">
-            <LogoParticles count={34} />
-            {/* Halo detrás del logo */}
-            <div
-              aria-hidden
-              className="absolute h-64 w-64 rounded-full bg-white/25 blur-3xl animate-halo-breathe"
-            />
-            <div
-              aria-hidden
-              className="absolute h-40 w-40 rounded-full bg-white/40 blur-2xl"
-            />
-            {/* Isotipo prominente */}
-            <div className="relative animate-logo-float">
-              <Image
-                src="/isotipo/Isotipo.png"
-                alt="NovaLIS"
-                width={520}
-                height={620}
-                priority
-                className="relative z-10 h-64 w-auto object-contain drop-shadow-[0_18px_45px_rgba(0,0,0,0.35)]"
-              />
-            </div>
-          </div>
-
-          {/* Mensaje de marca: centrado bajo el isotipo */}
-          <div className="max-w-md space-y-4 animate-fade-up">
-            <h1 className="text-2xl font-semibold tracking-tight xl:text-3xl">
-              Laboratory Information System
-            </h1>
-            <div aria-hidden className="flex items-center justify-center gap-3">
-              <span className="h-px w-14 bg-white/30" />
-              <span className="h-1.5 w-1.5 rounded-full bg-white/50" />
-              <span className="h-px w-14 bg-white/30" />
-            </div>
-            <p className="text-sm leading-relaxed text-white/70 xl:text-base">
-              Sistema avanzado para la gestión completa del proceso de examen
-              de laboratorio clínico.
-            </p>
+      {/* Formulario único y centrado: la marca vive dentro de la tarjeta */}
+      <div className="relative z-10 flex min-h-screen items-center justify-center p-6 sm:p-10">
+        {/* Partículas orbitando alrededor de la tarjeta (elemento dinámico) */}
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-0 flex items-center justify-center"
+        >
+          <div className="relative h-184 w-184">
+            <LogoParticles count={30} />
           </div>
         </div>
 
-        <p className="absolute inset-x-0 bottom-8 z-10 text-center text-xs text-primary-foreground/50 xl:bottom-10">
-          © {new Date().getFullYear()} Nova Lab
-        </p>
-      </div>
-
-      {/* Formulario: tarjeta de vidrio líquido */}
-      <div className="relative flex items-center justify-center p-6 sm:p-10">
         {/* Nota: el desplazamiento usa margen (no "transform") para no romper
             el "backdrop-blur" de la tarjeta: un ancestro con transform crea
             su propia raíz de fondo y el vidrio dejaría de ver la foto. */}
-        <div className="relative -mt-6 w-full max-w-sm animate-fade-in">
+        <div className="relative w-full max-w-sm animate-fade-in">
           {/* Sombra en degradado: dos capas suaves (teal → azul → violeta)
               muy desenfocadas por detrás de la tarjeta para simular una
               proyección de color de la luz que pasa por el vidrio. */}
           <div
             aria-hidden
-            className="pointer-events-none absolute -inset-8 -z-10 rounded-[2.5rem] opacity-70 blur-3xl"
+            className="pointer-events-none absolute -inset-8 -z-10 rounded-[2.5rem] opacity-60 blur-3xl"
             style={{
               background:
-                "linear-gradient(135deg, rgba(20,184,166,0.55) 0%, rgba(56,189,248,0.35) 45%, rgba(139,92,246,0.35) 100%)",
-            }}
-          />
-          <div
-            aria-hidden
-            className="pointer-events-none absolute -inset-4 -z-10 rounded-4xl opacity-60 blur-2xl"
-            style={{
-              background:
-                "linear-gradient(315deg, rgba(6,182,212,0.45) 0%, rgba(20,184,166,0.25) 60%, rgba(2,132,199,0.4) 100%)",
+                "linear-gradient(135deg, rgba(20,184,166,0.5) 0%, rgba(56,189,248,0.3) 45%, rgba(139,92,246,0.3) 100%)",
             }}
           />
 
-          {/* Filo de vidrio: borde en degradado que simula la refracción de luz.
-              La altura se ajusta al contenido con un mínimo cómodo (sin exceso). */}
-          <div className="flex min-h-[min(32rem,68vh)] flex-col rounded-[1.75rem] bg-linear-to-br from-white/35 via-white/10 to-black/20 p-px shadow-2xl shadow-black/45">
+          {/* Filo de vidrio: borde en degradado que simula la refracción de luz. */}
+          <div className="flex flex-col rounded-[1.75rem] bg-linear-to-br from-white/35 via-white/10 to-black/25 p-px shadow-2xl shadow-black/50">
             {/* Importante: este contenedor NO lleva "background-color" propio.
                 Si el elemento con "backdrop-filter" también tiene un fondo
                 semitransparente, algunos motores dejan de renderizar el
                 desenfoque; por eso el tinte oscuro va en una capa aparte,
                 pintada encima del vidrio ya desenfocado. */}
             <div className="relative flex flex-1 flex-col overflow-hidden rounded-[1.7rem] backdrop-blur-3xl backdrop-saturate-150">
-              {/* Tinte oscuro sobre el vidrio ya desenfocado: más intenso
-                  para dar profundidad y mejorar el contraste del formulario. */}
-              <div aria-hidden className="pointer-events-none absolute inset-0 bg-black/55" />
+              {/* Tinte oscuro sobre el vidrio ya desenfocado: intenso, como
+                  la tarjeta negra translúcida de la referencia. */}
+              <div aria-hidden className="pointer-events-none absolute inset-0 bg-black/60" />
               {/* Barniz diagonal: luz atravesando el vidrio */}
               <div
                 aria-hidden
-                className="pointer-events-none absolute inset-0 bg-linear-to-br from-white/12 via-transparent to-black/20"
+                className="pointer-events-none absolute inset-0 bg-linear-to-br from-white/10 via-transparent to-black/25"
               />
               {/* Reflejo especular superior */}
               <div
@@ -154,18 +87,18 @@ export default function LoginPage() {
               {/* Burbuja de luz */}
               <div
                 aria-hidden
-                className="pointer-events-none absolute -top-16 -right-10 h-40 w-40 rounded-full bg-white/25 blur-3xl"
+                className="pointer-events-none absolute -top-16 -right-10 h-40 w-40 rounded-full bg-white/20 blur-3xl"
               />
               {/* Tinte de color, como el agua */}
               <div
                 aria-hidden
-                className="pointer-events-none absolute -bottom-20 -left-16 h-48 w-48 rounded-full bg-primary/35 blur-3xl"
+                className="pointer-events-none absolute -bottom-20 -left-16 h-48 w-48 rounded-full bg-primary/30 blur-3xl"
               />
 
               <div className="relative flex flex-1 flex-col justify-center gap-7 p-8 sm:p-9">
-                {/* Isotipo compacto en móvil */}
-                <div className="flex flex-col items-center gap-3 text-center lg:hidden">
-                  <div className="relative">
+                {/* Marca integrada: isotipo ligeramente oscurecido con halo */}
+                <div className="flex flex-col items-center gap-3 text-center">
+                  <div className="relative animate-logo-float">
                     <div
                       aria-hidden
                       className="absolute inset-0 rounded-full bg-primary/25 blur-2xl"
@@ -176,17 +109,17 @@ export default function LoginPage() {
                       width={260}
                       height={310}
                       priority
-                      className="relative h-24 w-auto object-contain"
+                      className="relative h-24 w-auto object-contain brightness-90"
                     />
                   </div>
                 </div>
 
                 <div className="space-y-1.5 text-center">
-                  <h2 className="text-2xl font-semibold tracking-tight text-white">
+                  <h2 className="text-xl font-semibold uppercase tracking-[0.28em] text-white">
                     Iniciar sesión
                   </h2>
                   <p className="text-sm text-white/65">
-                    Accede con tus credenciales.
+                    Laboratory Information System
                   </p>
                 </div>
 
@@ -202,7 +135,10 @@ export default function LoginPage() {
             </div>
           </div>
         </div>
-      </div>
+
+        <p className="absolute inset-x-0 bottom-6 text-center text-xs text-white/50">
+          © {new Date().getFullYear()} Nova Lab
+        </p>
       </div>
     </div>
   );

@@ -1,25 +1,36 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { getSessionContext, hasRole } from "@/lib/auth/session";
+import { friendlyDbError } from "@/lib/errors";
 import type { ValueType } from "@/lib/database.types";
 
-async function requireCatalogAdmin() {
+type Ctx = Awaited<ReturnType<typeof getSessionContext>>;
+
+/** Guard de administración del catálogo: devuelve el contexto o un error
+ *  manejable por la UI (nunca lanza: un throw rompe el cliente). */
+async function catalogAdminCtx(): Promise<{ ctx: Ctx } | { error: string }> {
   const ctx = await getSessionContext();
   if (!hasRole(ctx.roles, ["org_admin", "sede_admin"]) && !ctx.profile?.es_superadmin) {
-    throw new Error("No autorizado para editar el catálogo");
+    return { error: "No autorizado para editar el catálogo." };
   }
-  return ctx;
+  return { ctx };
 }
+
+const MAX_NUMERIC_12_2 = 999_999_999.99; // tope de numeric(12,2)
 
 // ── Categorías ───────────────────────────────────────────────
 export async function saveCategoryAction(_prev: unknown, formData: FormData) {
-  const ctx = await requireCatalogAdmin();
+  const guard = await catalogAdminCtx();
+  if ("error" in guard) return { error: guard.error };
+  const ctx = guard.ctx;
   const id = String(formData.get("id") ?? "");
   const codigo = String(formData.get("codigo") ?? "").trim().toUpperCase();
   const nombre = String(formData.get("nombre") ?? "").trim();
   if (!codigo || !nombre) return { error: "Código y nombre son obligatorios." };
+  if (codigo.length > 40 || nombre.length > 200) return { error: "Código o nombre demasiado largo." };
 
   const supabase = await createClient();
   const payload = { organization_id: ctx.activeOrgId!, codigo, nombre };
@@ -27,7 +38,7 @@ export async function saveCategoryAction(_prev: unknown, formData: FormData) {
     ? await supabase.from("LIS_test_categories").update(payload).eq("id", id)
     : await supabase.from("LIS_test_categories").insert(payload);
   if (error) {
-    return { error: error.code === "23505" ? "Ya existe una categoría con ese código." : "No se pudo guardar." };
+    return { error: error.code === "23505" ? "Ya existe una categoría con ese código." : friendlyDbError(error, "No se pudo guardar.") };
   }
   revalidatePath("/catalogo");
   return { ok: true };
@@ -35,7 +46,9 @@ export async function saveCategoryAction(_prev: unknown, formData: FormData) {
 
 // ── Analitos ─────────────────────────────────────────────────
 export async function saveAnalyteAction(_prev: unknown, formData: FormData) {
-  const ctx = await requireCatalogAdmin();
+  const guard = await catalogAdminCtx();
+  if ("error" in guard) return { error: guard.error };
+  const ctx = guard.ctx;
   const id = String(formData.get("id") ?? "");
   const codigo = String(formData.get("codigo") ?? "").trim().toUpperCase();
   const nombre = String(formData.get("nombre") ?? "").trim();
@@ -49,13 +62,20 @@ export async function saveAnalyteAction(_prev: unknown, formData: FormData) {
   const valorMax = formData.get("valor_max");
 
   if (!codigo || !nombre) return { error: "Código y nombre son obligatorios." };
+  if (!["numerico", "texto", "opcion"].includes(valueType)) return { error: "Tipo de valor inválido." };
+  if (!Number.isInteger(decimales) || decimales < 0 || decimales > 4) {
+    return { error: "Decimales debe ser un entero entre 0 y 4." };
+  }
 
-  if (valorMin && valorMax) {
-    const minN = Number(valorMin);
-    const maxN = Number(valorMax);
-    if (Number.isFinite(minN) && Number.isFinite(maxN) && minN > maxN) {
-      return { error: "El valor mínimo no puede ser mayor que el valor máximo." };
+  const minN = valorMin ? Number(valorMin) : null;
+  const maxN = valorMax ? Number(valorMax) : null;
+  for (const [label, v] of [["mínimo", minN], ["máximo", maxN]] as const) {
+    if (v !== null && (!Number.isFinite(v) || Math.abs(v) > MAX_NUMERIC_12_2)) {
+      return { error: `El valor ${label} del rango no es válido.` };
     }
+  }
+  if (minN !== null && maxN !== null && minN > maxN) {
+    return { error: "El valor mínimo no puede ser mayor que el valor máximo." };
   }
 
   const supabase = await createClient();
@@ -67,7 +87,7 @@ export async function saveAnalyteAction(_prev: unknown, formData: FormData) {
     unidad: unidad || null,
     metodo: metodo || null,
     value_type: valueType,
-    decimales: Number.isFinite(decimales) ? decimales : 2,
+    decimales,
   };
 
   const { data: saved, error } = id
@@ -75,17 +95,20 @@ export async function saveAnalyteAction(_prev: unknown, formData: FormData) {
     : await supabase.from("LIS_analytes").insert(payload).select("id").single();
 
   if (error) {
-    return { error: error.code === "23505" ? "Ya existe un analito con ese código." : "No se pudo guardar." };
+    return { error: error.code === "23505" ? "Ya existe un analito con ese código." : friendlyDbError(error, "No se pudo guardar.") };
   }
 
   // rango de referencia general (solo al crear, si se proporcionó)
-  if (!id && valueType === "numerico" && (valorMin || valorMax)) {
-    await supabase.from("LIS_reference_ranges").insert({
+  if (!id && valueType === "numerico" && (minN !== null || maxN !== null)) {
+    const { error: rangeError } = await supabase.from("LIS_reference_ranges").insert({
       analyte_id: saved.id,
       sexo: "desconocido",
-      valor_min: valorMin ? Number(valorMin) : null,
-      valor_max: valorMax ? Number(valorMax) : null,
+      valor_min: minN,
+      valor_max: maxN,
     });
+    if (rangeError) {
+      return { error: friendlyDbError(rangeError, "El analito se guardó pero no su rango de referencia.") };
+    }
   }
 
   revalidatePath("/catalogo");
@@ -94,7 +117,9 @@ export async function saveAnalyteAction(_prev: unknown, formData: FormData) {
 
 // ── Estudios (con composición y precio base) ─────────────────
 export async function saveStudyAction(_prev: unknown, formData: FormData) {
-  const ctx = await requireCatalogAdmin();
+  const guard = await catalogAdminCtx();
+  if ("error" in guard) return { error: guard.error };
+  const ctx = guard.ctx;
   const id = String(formData.get("id") ?? "");
   const codigo = String(formData.get("codigo") ?? "").trim().toUpperCase();
   const nombre = String(formData.get("nombre") ?? "").trim();
@@ -103,10 +128,20 @@ export async function saveStudyAction(_prev: unknown, formData: FormData) {
   const tatH = formData.get("tiempo_entrega_h");
   const requiereAyuno = formData.get("requiere_ayuno") === "on";
   const precio = Number(formData.get("precio") ?? 0);
-  const analyteIds = formData.getAll("analyte_ids").map(String).filter(Boolean);
+  const analyteIds = [...new Set(formData.getAll("analyte_ids").map(String).filter(Boolean))];
 
   if (!codigo || !nombre) return { error: "Código y nombre son obligatorios." };
   if (analyteIds.length === 0) return { error: "Selecciona al menos un analito." };
+  if (!analyteIds.every((a) => z.string().uuid().safeParse(a).success)) {
+    return { error: "La composición incluye un analito inválido." };
+  }
+  if (!Number.isFinite(precio) || precio < 0 || precio > MAX_NUMERIC_12_2) {
+    return { error: "El precio debe ser un número entre 0 y 999,999,999.99." };
+  }
+  const tat = tatH ? Number(tatH) : null;
+  if (tat !== null && (!Number.isInteger(tat) || tat < 0 || tat > 8760)) {
+    return { error: "El tiempo de entrega debe ser un entero de horas válido (0-8760)." };
+  }
 
   const supabase = await createClient();
   const payload = {
@@ -115,7 +150,7 @@ export async function saveStudyAction(_prev: unknown, formData: FormData) {
     specimen_type_id: specimenTypeId || null,
     codigo,
     nombre,
-    tiempo_entrega_h: tatH ? Number(tatH) : null,
+    tiempo_entrega_h: tat,
     requiere_ayuno: requiereAyuno,
   };
 
@@ -124,39 +159,42 @@ export async function saveStudyAction(_prev: unknown, formData: FormData) {
     : await supabase.from("LIS_studies").insert(payload).select("id").single();
 
   if (error) {
-    return { error: error.code === "23505" ? "Ya existe un estudio con ese código." : "No se pudo guardar." };
+    return { error: error.code === "23505" ? "Ya existe un estudio con ese código." : friendlyDbError(error, "No se pudo guardar.") };
   }
 
   // Reemplazar composición
-  await supabase.from("LIS_study_analytes").delete().eq("study_id", study.id);
-  await supabase.from("LIS_study_analytes").insert(
+  const { error: delError } = await supabase.from("LIS_study_analytes").delete().eq("study_id", study.id);
+  if (delError) return { error: friendlyDbError(delError, "No se pudo actualizar la composición.") };
+  const { error: compError } = await supabase.from("LIS_study_analytes").insert(
     analyteIds.map((analyte_id, i) => ({ study_id: study.id, analyte_id, orden: i + 1 }))
   );
+  if (compError) return { error: friendlyDbError(compError, "No se pudo guardar la composición del estudio.") };
 
   // Precio base (sede null). Upsert manual: borrar el base vigente y crear.
-  if (Number.isFinite(precio)) {
-    await supabase
-      .from("LIS_study_prices")
-      .delete()
-      .eq("study_id", study.id)
-      .is("sede_id", null);
-    await supabase.from("LIS_study_prices").insert({
-      study_id: study.id,
-      sede_id: null,
-      moneda: "PEN",
-      precio,
-    });
-  }
+  const { error: delPriceError } = await supabase
+    .from("LIS_study_prices")
+    .delete()
+    .eq("study_id", study.id)
+    .is("sede_id", null);
+  if (delPriceError) return { error: friendlyDbError(delPriceError, "No se pudo actualizar el precio.") };
+  const { error: priceError } = await supabase.from("LIS_study_prices").insert({
+    study_id: study.id,
+    sede_id: null,
+    moneda: "PEN",
+    precio,
+  });
+  if (priceError) return { error: friendlyDbError(priceError, "El estudio se guardó pero no su precio.") };
 
   revalidatePath("/catalogo");
   return { ok: true };
 }
 
 export async function deleteStudyAction(studyId: string) {
-  await requireCatalogAdmin();
+  const guard = await catalogAdminCtx();
+  if ("error" in guard) return { error: guard.error };
   const supabase = await createClient();
   const { error } = await supabase.from("LIS_studies").update({ activo: false }).eq("id", studyId);
-  if (error) return { error: error.message };
+  if (error) return { error: friendlyDbError(error, "No se pudo dar de baja el estudio.") };
   revalidatePath("/catalogo");
   return { ok: true };
 }

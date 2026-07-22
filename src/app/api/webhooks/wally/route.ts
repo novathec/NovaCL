@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { timingSafeEqual } from "node:crypto";
 import { createAdminClient } from "@/lib/supabase/server";
 import type { InvoiceStatus, Database } from "@/lib/database.types";
 
@@ -33,6 +34,13 @@ const STATUS_MAP: Record<string, InvoiceStatus> = {
   issued: "emitida",
 };
 
+/** Comparación en tiempo constante del secreto compartido. */
+function secretMatches(provided: string, expected: string): boolean {
+  const a = Buffer.from(provided);
+  const b = Buffer.from(expected);
+  return a.length === b.length && timingSafeEqual(a, b);
+}
+
 export async function POST(req: NextRequest) {
   const secret = process.env.WALLY_WEBHOOK_SECRET;
   const provided =
@@ -40,14 +48,22 @@ export async function POST(req: NextRequest) {
     req.nextUrl.searchParams.get("secret") ??
     "";
 
-  // En producción el secreto es obligatorio. Si está configurado, debe coincidir.
-  if (secret && provided !== secret) {
+  // Falla cerrada: sin secreto configurado el webhook NO opera (un endpoint
+  // abierto permitiría marcar comprobantes como pagados desde Internet).
+  if (!secret) {
+    return NextResponse.json({ error: "webhook no configurado" }, { status: 500 });
+  }
+  if (!secretMatches(provided, secret)) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
 
   let payload: Record<string, unknown>;
   try {
-    payload = await req.json();
+    const body: unknown = await req.json();
+    if (!body || typeof body !== "object" || Array.isArray(body)) {
+      return NextResponse.json({ error: "payload inválido" }, { status: 400 });
+    }
+    payload = body as Record<string, unknown>;
   } catch {
     return NextResponse.json({ error: "invalid json" }, { status: 400 });
   }

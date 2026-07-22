@@ -297,6 +297,7 @@ export interface Database {
         medico_solicitante_id: string | null;
         diagnostico: string | null;
         observaciones: string | null;
+        motivo_anulacion: string | null;
         moneda: string;
         total: number;
         created_by: string | null;
