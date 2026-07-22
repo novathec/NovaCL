@@ -295,16 +295,20 @@
     transform: scale(1.08);
   }
 }
-/* Borde vivo del botón de login: un cuadrado con degradado cónico (dos arcos
-   luminosos opuestos) gira por detrás del botón; solo el anillo de ~1.5px que
-   sobresale queda visible, así los arcos se leen como dos "partículas" que
-   recorren el contorno. */
-@keyframes border-orbit {
-  from {
-    transform: translate(-50%, -50%) rotate(0deg);
+/* Iluminación dinámica del botón de login: respiración de luz (teal + azul
+   clínico) cuando los campos están completos; con hover la iluminación deja
+   de pulsar y permanece alta. */
+@keyframes btn-glow {
+  0%,
+  100% {
+    box-shadow:
+      0 0 10px rgba(45, 212, 191, 0.22),
+      0 0 26px rgba(56, 189, 248, 0.12);
   }
-  to {
-    transform: translate(-50%, -50%) rotate(360deg);
+  50% {
+    box-shadow:
+      0 0 24px rgba(45, 212, 191, 0.55),
+      0 0 48px rgba(56, 189, 248, 0.3);
   }
 }
 
@@ -326,13 +330,28 @@
 .animate-halo-breathe {
   animation: halo-breathe 5.5s ease-in-out infinite;
 }
-.animate-border-orbit {
-  animation: border-orbit 2.8s linear infinite;
-  will-change: transform;
+.animate-btn-glow {
+  animation: btn-glow 1.6s ease-in-out infinite;
 }
-/* Al pasar el cursor por el botón, los cometas aceleran */
-.group:hover .animate-border-orbit {
-  animation-duration: 1.1s;
+/* Latido de los nodos de la rejilla eléctrica del fondo de login */
+@keyframes grid-pulse {
+  0%,
+  100% {
+    opacity: 0.35;
+  }
+  50% {
+    opacity: 0.85;
+  }
+}
+.animate-grid-pulse {
+  animation: grid-pulse 4.5s ease-in-out infinite;
+}
+/* Con hover, iluminación alta constante (sin pulso) */
+.group:hover .animate-btn-glow {
+  animation: none;
+  box-shadow:
+    0 0 28px rgba(45, 212, 191, 0.6),
+    0 0 56px rgba(56, 189, 248, 0.35);
 }
 
 /* Utilidades de identidad eléctrica */

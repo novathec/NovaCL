@@ -12,33 +12,15 @@ function SubmitButton({ ready }: { ready: boolean }) {
   const animated = ready && !pending;
   return (
     <div className="group relative rounded-full">
-      {/* Borde vivo: visible solo cuando correo y contraseña están completos.
-          Un cuadrado con degradado cónico gira detrás del botón; como el
-          botón lo cubre todo salvo un anillo de 1.5px, se ven dos cometas
-          (cabeza brillante + cola que se desvanece, como estrellas fugaces,
-          una azul y una teal) recorriendo el borde. Con hover aceleran
-          (ver .animate-border-orbit en globals.css). */}
-      {animated && (
-        <span
-          aria-hidden
-          className="pointer-events-none absolute -inset-0.5 overflow-hidden rounded-full"
-        >
-          <span
-            className="absolute left-1/2 top-1/2 aspect-square w-[110%] animate-border-orbit"
-            style={{
-              background:
-                "conic-gradient(transparent 0deg 30deg, rgba(56,189,248,0) 45deg, rgba(56,189,248,0.6) 105deg, rgba(186,230,253,1) 128deg, transparent 131deg 210deg, rgba(45,212,191,0) 225deg, rgba(45,212,191,0.6) 285deg, rgba(204,251,241,1) 308deg, transparent 311deg 360deg)",
-            }}
-          />
-        </span>
-      )}
+      {/* Iluminación dinámica: con los campos completos el botón "respira"
+          luz (teal + azul); con hover la iluminación permanece alta sin
+          pulsar (ver .animate-btn-glow en globals.css). */}
       <Button
         type="submit"
-        // "hover:bg-primary" anula el "hover:bg-primary/90" del variant:
-        // con 10% de transparencia se veía el degradado cónico que gira
-        // debajo del botón. El feedback de hover pasa a ser un brillo.
+        // "hover:bg-primary" anula el "hover:bg-primary/90" del variant
+        // (evita transparentar el botón); el feedback de hover es el brillo.
         className={`relative h-11 w-full rounded-full text-sm font-semibold tracking-wide transition-all duration-500 hover:bg-primary hover:brightness-110 ${
-          animated ? "shadow-[0_0_24px_rgba(45,212,191,0.4)]" : ""
+          animated ? "animate-btn-glow" : ""
         }`}
         disabled={pending}
       >
@@ -111,7 +93,7 @@ export function LoginForm() {
           al enfocar (o si el campo ya tiene texto, p. ej. autocompletado). */}
       <div
         className={`relative h-12 border-b transition-colors duration-200 ${
-          emailFocused ? "border-cyan-300" : "border-white/35"
+          emailFocused ? "border-cyan-300!" : "border-white/70!"
         }`}
       >
         <input
@@ -135,7 +117,7 @@ export function LoginForm() {
           mostrar/ocultar a la derecha (fijo, no participa de la animación). */}
       <div
         className={`relative h-12 border-b transition-colors duration-200 ${
-          passwordFocused ? "border-cyan-300" : "border-white/35"
+          passwordFocused ? "border-cyan-300!" : "border-white/70!"
         }`}
       >
         <input
@@ -165,6 +147,27 @@ export function LoginForm() {
           className="absolute inset-y-0 right-0 flex w-8 items-center justify-center text-white/65 transition-colors hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
         >
           {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+        </button>
+      </div>
+
+      {/* Fila de opciones: recordar sesión (izquierda) + recuperación de
+          contraseña (derecha). "remember" viaja en el FormData al servidor. */}
+      <div className="-mt-4 flex items-center justify-between">
+        <label className="flex cursor-pointer select-none items-center gap-2 text-xs font-medium text-white/75 [text-shadow:0_1px_2px_rgb(0_0_0/0.6)]">
+          <input
+            type="checkbox"
+            name="remember"
+            className="h-4 w-4 rounded border-white/40 bg-white/10 accent-teal-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300/50"
+          />
+          Recordar sesión
+        </label>
+        {/* Aún sin flujo asociado; listo para enlazar a la ruta de
+            restablecimiento cuando exista. */}
+        <button
+          type="button"
+          className="text-xs font-medium text-cyan-300/90 transition-colors [text-shadow:0_1px_2px_rgb(0_0_0/0.6)] hover:text-cyan-200 focus-visible:underline focus-visible:outline-none"
+        >
+          ¿Olvidó su contraseña?
         </button>
       </div>
 

@@ -1,6 +1,7 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import type { Database } from "@/lib/database.types";
+import { REMEMBER_COOKIE, applyRemember } from "@/lib/auth/remember";
 
 /** Rutas publicas que no requieren sesion. */
 const PUBLIC_PATHS = [
@@ -39,6 +40,10 @@ export async function updateSession(request: NextRequest) {
 
   let response = NextResponse.next({ request });
 
+  // Preferencia "recordar sesión": si no es "1", el refresco de token vuelve
+  // a emitir las cookies de auth como cookies de sesión (sin persistencia).
+  const remember = request.cookies.get(REMEMBER_COOKIE)?.value === "1";
+
   const supabase = createServerClient<Database>(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
@@ -53,7 +58,7 @@ export async function updateSession(request: NextRequest) {
           );
           response = NextResponse.next({ request });
           cookiesToSet.forEach(({ name, value, options }) =>
-            response.cookies.set(name, value, options)
+            response.cookies.set(name, value, applyRemember(name, options, remember))
           );
         },
       },
