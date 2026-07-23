@@ -6,6 +6,7 @@ import { getSessionContext, hasRole } from "@/lib/auth/session";
 import { friendlyDbError } from "@/lib/errors";
 import type { DeliveryChannel } from "@/lib/database.types";
 import { sendResultEmail } from "@/lib/integrations/notifications";
+import { getResultsPortalBase } from "@/lib/portal-url";
 
 /**
  * Crea una entrega de resultados. Genera un token de acceso al portal público
@@ -36,26 +37,59 @@ export async function createDeliveryAction(
     return { error: "Solo se pueden entregar órdenes completadas (resultados validados)." };
   }
 
+  let portalBase: string;
+  try {
+    portalBase = getResultsPortalBase();
+  } catch (e) {
+    return { error: (e as Error).message };
+  }
+
   const expira = new Date();
   expira.setDate(expira.getDate() + 30);
 
-  const { data: delivery, error } = await supabase
+  // Reenviar por el mismo canal reutiliza la entrega activa (mismo
+  // access_token/link) en vez de acumular una fila nueva por cada click.
+  const { data: existing } = await supabase
     .from("LIS_result_deliveries")
-    .insert({
-      organization_id: ctx.activeOrgId!,
-      order_id: orderId,
-      canal,
-      destino,
-      status: "pendiente",
-      token_expira_at: expira.toISOString(),
-      enviado_por: ctx.user.id,
-    })
     .select("id, access_token")
-    .single();
+    .eq("order_id", orderId)
+    .eq("canal", canal)
+    .neq("status", "fallido")
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
 
+  const deliveryResult = existing
+    ? await supabase
+        .from("LIS_result_deliveries")
+        .update({
+          destino,
+          status: "pendiente",
+          token_expira_at: expira.toISOString(),
+          enviado_por: ctx.user.id,
+          visto_at: null,
+          error_detalle: null,
+        })
+        .eq("id", existing.id)
+        .select("id, access_token")
+        .single()
+    : await supabase
+        .from("LIS_result_deliveries")
+        .insert({
+          organization_id: ctx.activeOrgId!,
+          order_id: orderId,
+          canal,
+          destino,
+          status: "pendiente",
+          token_expira_at: expira.toISOString(),
+          enviado_por: ctx.user.id,
+        })
+        .select("id, access_token")
+        .single();
+
+  const { data: delivery, error } = deliveryResult;
   if (error) return { error: friendlyDbError(error, "No se pudo crear la entrega.") };
 
-  const portalBase = process.env.RESULTS_PUBLIC_BASE_URL ?? "http://localhost:3000/portal";
   const link = `${portalBase}/${delivery.access_token}`;
 
   let sent = true;

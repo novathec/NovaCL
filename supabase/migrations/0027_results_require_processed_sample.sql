@@ -140,7 +140,7 @@ begin
   ) values (
     v_org, p_order_item_id, p_analyte_id, v_analyte.nombre, v_analyte.unidad,
     p_valor_num, p_valor_texto, v_flag, v_rango_txt, v_analyte.metodo, p_nota,
-    case when p_validar then 'validado' else 'preliminar' end,
+    (case when p_validar then 'validado' else 'preliminar' end)::app.result_status,
     auth.uid(), now(),
     case when p_validar then auth.uid() end,
     case when p_validar then now() end

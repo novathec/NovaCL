@@ -2,6 +2,7 @@ import { createAdminClient } from "@/lib/supabase/server";
 import { generateAndStoreOrderReport } from "@/lib/report-storage";
 import { emitInvoiceForOrder } from "@/lib/billing-core";
 import { sendResultEmail } from "@/lib/integrations/notifications";
+import { getResultsPortalBase } from "@/lib/portal-url";
 
 export type FinalizeSummary = {
   /** Versión del PDF almacenado en Storage, si se generó. */
@@ -104,8 +105,7 @@ export async function finalizeCompletedOrder(
           .single();
         if (error) throw new Error(error.message);
 
-        const portalBase = process.env.RESULTS_PUBLIC_BASE_URL ?? "http://localhost:3000/portal";
-        const link = `${portalBase}/${delivery.access_token}`;
+        const link = `${getResultsPortalBase()}/${delivery.access_token}`;
 
         let sent = true;
         let errorDetalle: string | null = null;
