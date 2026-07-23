@@ -3,14 +3,37 @@
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Search, Check, X, Loader2, UserCheck, ClipboardCheck, FlaskConical } from "lucide-react";
-import { searchPatientsAction } from "@/lib/actions/patients";
+import {
+  Search,
+  Check,
+  X,
+  Loader2,
+  UserCheck,
+  UserPlus,
+  IdCard,
+  TriangleAlert,
+  ClipboardCheck,
+  FlaskConical,
+} from "lucide-react";
+import {
+  searchPatientsAction,
+  createPatientFromDniAction,
+  getPatientLiteAction,
+  type PatientLite,
+} from "@/lib/actions/patients";
 import { createOrderAction } from "@/lib/actions/orders";
 import { linkOrderToAppointmentAction } from "@/lib/actions/appointments";
 import { Button } from "@/components/ui/button";
 import { Input, Textarea } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   Select,
   SelectContent,
@@ -19,7 +42,9 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
+import { PatientForm } from "@/components/patients/patient-form";
 import { ProfessionalPicker } from "@/components/professionals/professional-picker";
+import { missingPatientFields } from "@/lib/patients/completeness";
 import { cn, formatMoney, calcAge } from "@/lib/utils";
 import type { OrderPriority } from "@/lib/database.types";
 
@@ -30,16 +55,6 @@ export type StudyOption = {
   categoria: string;
   requiere_ayuno: boolean;
   precio: number;
-};
-
-type PatientLite = {
-  id: string;
-  nombres: string;
-  apellidos: string;
-  tipo_documento: string;
-  numero_documento: string;
-  sexo: string;
-  fecha_nacimiento: string | null;
 };
 
 export function NewOrderForm({
@@ -54,7 +69,10 @@ export function NewOrderForm({
   const router = useRouter();
   const [patient, setPatient] = useState<PatientLite | null>(initialPatient);
   const [results, setResults] = useState<PatientLite[]>([]);
+  const [query, setQuery] = useState("");
   const [searching, startSearch] = useTransition();
+  const [dniLoading, startDni] = useTransition();
+  const [modalOpen, setModalOpen] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [prioridad, setPrioridad] = useState<OrderPriority>("rutina");
   const [medico, setMedico] = useState("");
@@ -88,8 +106,42 @@ export function NewOrderForm({
   }
 
   function onSearch(q: string) {
+    setQuery(q);
     startSearch(async () => {
       setResults(await searchPatientsAction(q));
+    });
+  }
+
+  const dniQuery = query.trim();
+  const canDniLookup = /^\d{8}$/.test(dniQuery) && !results.some((p) => p.numero_documento === dniQuery);
+
+  function lookupDni() {
+    startDni(async () => {
+      const res = await createPatientFromDniAction(dniQuery);
+      if (!res.ok) {
+        toast.error(res.error);
+        return;
+      }
+      setPatient(res.patient);
+      setResults([]);
+      setQuery("");
+      toast.success(
+        res.created
+          ? `Paciente ${res.patient.nombres} registrado desde RENIEC. Completa sus datos luego.`
+          : `Paciente ${res.patient.nombres} ya estaba registrado.`
+      );
+    });
+  }
+
+  function onPatientCreated(id: string) {
+    setModalOpen(false);
+    startDni(async () => {
+      const p = await getPatientLiteAction(id);
+      if (p) {
+        setPatient(p);
+        setResults([]);
+        setQuery("");
+      }
     });
   }
 
@@ -112,7 +164,9 @@ export function NewOrderForm({
       }
       if (citaId && res.orderId) await linkOrderToAppointmentAction(citaId, res.orderId);
       toast.success(`Orden ${res.codigo} creada`);
-      router.push(`/ordenes/${res.orderId}` as never);
+      // Siguiente paso del flujo: tomar la muestra. Se aterriza directamente en
+      // la pestaña Muestras de la orden recién creada.
+      router.push(`/ordenes/${res.orderId}?tab=muestras` as never);
     });
   }
 
@@ -121,17 +175,28 @@ export function NewOrderForm({
       <div className="space-y-6 lg:col-span-2">
         {/* Paso 1: paciente */}
         <Card>
-          <CardHeader>
+          <CardHeader className="flex-row items-center justify-between space-y-0">
             <CardTitle className="flex items-center gap-2 text-base">
               <UserCheck className="h-4 w-4 text-primary" /> 1. Paciente
             </CardTitle>
+            <Button variant="outline" size="sm" onClick={() => setModalOpen(true)}>
+              <UserPlus className="h-4 w-4" /> Nuevo
+            </Button>
           </CardHeader>
           <CardContent>
             {patient ? (
               <div className="flex items-center justify-between rounded-lg border bg-muted/40 p-3">
                 <div>
-                  <p className="font-medium">
+                  <p className="flex items-center gap-1.5 font-medium">
                     {patient.nombres} {patient.apellidos}
+                    {missingPatientFields(patient).length > 0 && (
+                      <span
+                        className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700 dark:bg-amber-950 dark:text-amber-300"
+                        title={`Faltan datos: ${missingPatientFields(patient).join(", ")}`}
+                      >
+                        <TriangleAlert className="h-3 w-3" /> Incompleto
+                      </span>
+                    )}
                   </p>
                   <p className="text-sm text-muted-foreground">
                     {patient.tipo_documento} {patient.numero_documento} · {calcAge(patient.fecha_nacimiento)}
@@ -147,7 +212,8 @@ export function NewOrderForm({
                   <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                   <Input
                     className="pl-9"
-                    placeholder="Buscar por nombre o documento..."
+                    value={query}
+                    placeholder="Buscar por nombre o DNI..."
                     onChange={(e) => onSearch(e.target.value)}
                   />
                   {searching && (
@@ -161,6 +227,7 @@ export function NewOrderForm({
                       onClick={() => {
                         setPatient(p);
                         setResults([]);
+                        setQuery("");
                       }}
                       className="flex w-full items-center justify-between rounded-md border px-3 py-2 text-left text-sm hover:bg-accent"
                     >
@@ -171,6 +238,22 @@ export function NewOrderForm({
                     </button>
                   ))}
                 </div>
+                {canDniLookup && !searching && (
+                  <button
+                    onClick={lookupDni}
+                    disabled={dniLoading}
+                    className="flex w-full items-center gap-2 rounded-md border border-dashed border-primary/40 bg-primary/5 px-3 py-2 text-left text-sm hover:bg-primary/10 disabled:opacity-60"
+                  >
+                    {dniLoading ? (
+                      <Loader2 className="h-4 w-4 animate-spin text-primary" />
+                    ) : (
+                      <IdCard className="h-4 w-4 text-primary" />
+                    )}
+                    <span>
+                      Buscar DNI <span className="font-medium">{dniQuery}</span> en RENIEC y registrar
+                    </span>
+                  </button>
+                )}
               </div>
             )}
           </CardContent>
@@ -293,6 +376,18 @@ export function NewOrderForm({
           </CardContent>
         </Card>
       </div>
+
+      <Dialog open={modalOpen} onOpenChange={setModalOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Registrar paciente</DialogTitle>
+            <DialogDescription>
+              Ingresa el DNI y pulsa Autocompletar para traer los datos desde RENIEC.
+            </DialogDescription>
+          </DialogHeader>
+          <PatientForm onDone={onPatientCreated} />
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

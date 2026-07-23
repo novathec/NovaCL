@@ -1,10 +1,16 @@
 "use client";
 
-import { useActionState, useEffect, useState } from "react";
+import { useActionState, useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { savePatientAction, type PatientFormState } from "@/lib/actions/patients";
+import { Loader2, Search } from "lucide-react";
+import {
+  savePatientAction,
+  lookupDniAction,
+  type PatientFormState,
+} from "@/lib/actions/patients";
 import { StickyFormActions } from "@/components/forms/sticky-form-actions";
+import { Button } from "@/components/ui/button";
 import { Input, Textarea } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -38,6 +44,37 @@ export function PatientForm({
   const [tipoDoc, setTipoDoc] = useState<string>(patient?.tipo_documento ?? "DNI");
   const today = new Date().toISOString().slice(0, 10);
   const [showClinical, setShowClinical] = useState(false);
+
+  // Campos autocompletables desde el DNI: controlados para poder rellenarlos.
+  const [numeroDoc, setNumeroDoc] = useState(patient?.numero_documento ?? "");
+  const [nombres, setNombres] = useState(patient?.nombres ?? "");
+  const [apellidos, setApellidos] = useState(patient?.apellidos ?? "");
+  const [fechaNac, setFechaNac] = useState(patient?.fecha_nacimiento ?? "");
+  const [direccion, setDireccion] = useState(patient?.direccion ?? "");
+  const [looking, startLookup] = useTransition();
+
+  const canLookup = tipoDoc === "DNI" && /^\d{8}$/.test(numeroDoc);
+
+  function autofillFromDni() {
+    startLookup(async () => {
+      const res = await lookupDniAction(numeroDoc);
+      if (!res.ok) {
+        toast.error(res.error);
+        return;
+      }
+      if (res.existing) {
+        toast.warning(
+          `Ya existe un paciente con DNI ${numeroDoc}: ${res.existing.apellidos}, ${res.existing.nombres}.`
+        );
+      }
+      const p = res.person;
+      setNombres(p.nombres);
+      setApellidos(p.apellidos);
+      if (p.fechaNacimiento) setFechaNac(p.fechaNacimiento);
+      if (p.direccion) setDireccion(p.direccion);
+      toast.success("Datos autocompletados desde RENIEC. Completa sexo y teléfono.");
+    });
+  }
 
   useEffect(() => {
     if (state?.ok && state.id) {
@@ -87,14 +124,34 @@ export function PatientForm({
         </div>
         <div className="space-y-2">
           <Label htmlFor="numero_documento">Número de documento</Label>
-          <Input
-            id="numero_documento"
-            name="numero_documento"
-            defaultValue={patient?.numero_documento}
-            required
-            inputMode={tipoDoc === "OTRO" ? "text" : "numeric"}
-            pattern={docPattern}
-          />
+          <div className="flex gap-2">
+            <Input
+              id="numero_documento"
+              name="numero_documento"
+              value={numeroDoc}
+              onChange={(e) => setNumeroDoc(e.target.value)}
+              required
+              inputMode={tipoDoc === "OTRO" ? "text" : "numeric"}
+              pattern={docPattern}
+            />
+            {tipoDoc === "DNI" && (
+              <Button
+                type="button"
+                variant="outline"
+                onClick={autofillFromDni}
+                disabled={!canLookup || looking}
+                title="Autocompletar con RENIEC"
+              >
+                {looking ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
+                <span className="hidden sm:inline">Autocompletar</span>
+              </Button>
+            )}
+          </div>
+          {tipoDoc === "DNI" && (
+            <p className="text-xs text-muted-foreground">
+              Ingresa el DNI y pulsa Autocompletar para traer nombres, apellidos y fecha de nacimiento.
+            </p>
+          )}
           {fe.numero_documento && <p className="text-xs text-destructive">{fe.numero_documento}</p>}
         </div>
       </div>
@@ -102,12 +159,24 @@ export function PatientForm({
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="space-y-2">
           <Label htmlFor="nombres">Nombres</Label>
-          <Input id="nombres" name="nombres" defaultValue={patient?.nombres} required />
+          <Input
+            id="nombres"
+            name="nombres"
+            value={nombres}
+            onChange={(e) => setNombres(e.target.value)}
+            required
+          />
           {fe.nombres && <p className="text-xs text-destructive">{fe.nombres}</p>}
         </div>
         <div className="space-y-2">
           <Label htmlFor="apellidos">Apellidos</Label>
-          <Input id="apellidos" name="apellidos" defaultValue={patient?.apellidos} required />
+          <Input
+            id="apellidos"
+            name="apellidos"
+            value={apellidos}
+            onChange={(e) => setApellidos(e.target.value)}
+            required
+          />
           {fe.apellidos && <p className="text-xs text-destructive">{fe.apellidos}</p>}
         </div>
       </div>
@@ -119,7 +188,8 @@ export function PatientForm({
             id="fecha_nacimiento"
             name="fecha_nacimiento"
             type="date"
-            defaultValue={patient?.fecha_nacimiento ?? ""}
+            value={fechaNac}
+            onChange={(e) => setFechaNac(e.target.value)}
             min="1900-01-01"
             max={today}
           />
@@ -163,7 +233,12 @@ export function PatientForm({
 
       <div className="space-y-2">
         <Label htmlFor="direccion">Dirección</Label>
-        <Textarea id="direccion" name="direccion" defaultValue={patient?.direccion ?? ""} />
+        <Textarea
+          id="direccion"
+          name="direccion"
+          value={direccion}
+          onChange={(e) => setDireccion(e.target.value)}
+        />
       </div>
 
       {/* Datos clínicos y de seguridad */}

@@ -8,8 +8,15 @@ import { PatientDialog } from "@/components/patients/patient-dialog";
 import { Card, CardContent } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { calcAge, formatDate } from "@/lib/utils";
-import { FileText } from "lucide-react";
+import { missingPatientFields } from "@/lib/patients/completeness";
+import { FileText, TriangleAlert } from "lucide-react";
 
 export const metadata = { title: "Pacientes" };
 
@@ -66,9 +73,29 @@ export default async function PacientesPage({
                 patients.map((p) => (
                   <TableRow key={p.id}>
                     <TableCell>
-                      <Link href={`/pacientes/${p.id}`} className="font-medium text-primary hover:underline">
-                        {p.apellidos}, {p.nombres}
-                      </Link>
+                      <div className="flex items-center gap-1.5">
+                        <Link href={`/pacientes/${p.id}`} className="font-medium text-primary hover:underline">
+                          {p.apellidos}, {p.nombres}
+                        </Link>
+                        {(() => {
+                          const missing = missingPatientFields(p);
+                          if (missing.length === 0) return null;
+                          return (
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <span className="inline-flex text-amber-500" aria-label="Registro incompleto">
+                                    <TriangleAlert className="h-4 w-4" />
+                                  </span>
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                  Registro incompleto — falta: {missing.join(", ")}.
+                                </TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
+                          );
+                        })()}
+                      </div>
                       <p className="text-xs text-muted-foreground">
                         {p.sexo === "F" ? "Femenino" : p.sexo === "M" ? "Masculino" : "—"}
                       </p>

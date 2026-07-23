@@ -19,10 +19,15 @@ import { calcAge, formatDate, formatMoney } from "@/lib/utils";
 
 export default async function OrderDetailPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ tab?: string }>;
 }) {
   const { id } = await params;
+  const { tab } = await searchParams;
+  // Pestaña inicial deep-linkable (?tab=muestras al crear la orden).
+  const initialTab = tab === "muestras" || tab === "trazabilidad" ? tab : "estudios";
   const ctx = await getSessionContext();
   const supabase = await createClient();
 
@@ -208,7 +213,7 @@ export default async function OrderDetailPage({
         </Card>
       )}
 
-      <Tabs defaultValue="estudios">
+      <Tabs defaultValue={initialTab}>
         <TabsList>
           <TabsTrigger value="estudios">Estudios</TabsTrigger>
           <TabsTrigger value="muestras">Muestras</TabsTrigger>

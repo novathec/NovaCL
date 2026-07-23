@@ -23,11 +23,18 @@ export default async function ResultadosPage({
   await requireModuleAccess("resultados");
   const supabase = await createClient();
 
+  // Órdenes con trabajo de resultados pendiente. Mismo conjunto de "trabajo
+  // activo" que usa el dashboard. Se excluye 'completada' (todos los estudios
+  // validados → nada pendiente de ingreso/validación; esas pasan a Entrega) y
+  // los terminales 'entregada'/'anulada'.
+  // Ojo: el rollup mantiene la orden en 'registrada' hasta validar el primer
+  // estudio; tomar la muestra NO cambia el estado de la orden, por eso hay que
+  // incluir 'registrada'/'en_toma' o una orden recién puesta en proceso no saldría.
   let query = supabase
     .from("v_order_overview")
     .select("*")
     .eq("organization_id", ctx.activeOrgId!)
-    .in("status", ["en_proceso", "parcial", "completada"])
+    .in("status", ["registrada", "en_toma", "en_proceso", "parcial"])
     .order("prioridad", { ascending: false })
     .order("created_at", { ascending: true })
     .limit(60);
@@ -81,7 +88,7 @@ export default async function ResultadosPage({
                     </TableCell>
                     <TableCell className="text-right">
                       <Button asChild size="sm">
-                        <Link href={`/resultados/${o.id}`}>
+                        <Link href={`/resultados/${o.id}?from=list`}>
                           <FlaskConical className="h-4 w-4" /> Ingresar <ArrowRight className="h-4 w-4" />
                         </Link>
                       </Button>

@@ -2,8 +2,9 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { toast } from "sonner";
-import { TestTube2, Plus, Loader2, PackageCheck } from "lucide-react";
+import { TestTube2, Plus, Loader2, PackageCheck, FlaskConical, ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -154,6 +155,18 @@ export function SamplesPanel({
               )}
             </div>
           ))}
+
+          {/* Siguiente paso del flujo: con la muestra tomada, ya se pueden
+              ingresar resultados. Enlace opcional (no fuerza el salto). */}
+          {samples.length > 0 && (
+            <div className="flex justify-end border-t pt-3">
+              <Button asChild size="sm" variant="outline">
+                <Link href={`/resultados/${orderId}`}>
+                  <FlaskConical className="h-4 w-4" /> Ir a Resultados <ArrowRight className="h-4 w-4" />
+                </Link>
+              </Button>
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>

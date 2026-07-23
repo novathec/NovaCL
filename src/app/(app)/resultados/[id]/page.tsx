@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, ClipboardList } from "lucide-react";
 import { getSessionContext } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { PageHeader } from "@/components/page-header";
@@ -11,10 +11,14 @@ import { calcAge } from "@/lib/utils";
 
 export default async function ResultEntryPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ from?: string }>;
 }) {
   const { id } = await params;
+  const { from } = await searchParams;
+  const fromList = from === "list";
   const ctx = await getSessionContext();
   const supabase = await createClient();
 
@@ -73,11 +77,22 @@ export default async function ResultEntryPage({
 
   return (
     <>
-      <Button asChild variant="ghost" size="sm" className="mb-2">
-        <Link href={`/ordenes/${id}`}>
-          <ArrowLeft className="h-4 w-4" /> Orden {order.codigo}
-        </Link>
-      </Button>
+      {/* Retorno contextual: si se llegó desde la lista, volver a ella (y
+          ofrecer el salto a la orden); si se llegó desde la orden, volver a ella. */}
+      <div className="mb-2 flex items-center gap-1">
+        <Button asChild variant="ghost" size="sm">
+          <Link href={fromList ? "/resultados" : `/ordenes/${id}`}>
+            <ArrowLeft className="h-4 w-4" /> {fromList ? "Resultados" : `Orden ${order.codigo}`}
+          </Link>
+        </Button>
+        {fromList && (
+          <Button asChild variant="ghost" size="sm" className="text-muted-foreground">
+            <Link href={`/ordenes/${id}`}>
+              <ClipboardList className="h-4 w-4" /> Ver orden {order.codigo}
+            </Link>
+          </Button>
+        )}
+      </div>
       <PageHeader
         title={`Resultados · ${order.codigo}`}
         description={`${patient.nombres} ${patient.apellidos} · ${patient.numero_documento} · ${calcAge(patient.fecha_nacimiento)}`}

@@ -5,6 +5,22 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { getSessionContext } from "@/lib/auth/session";
 import { friendlyDbError } from "@/lib/errors";
+import { lookupDni, ReniecError, type ReniecPerson } from "@/lib/integrations/reniec";
+
+/** Datos mínimos de un paciente para selección (búsqueda / nueva atención). */
+export type PatientLite = {
+  id: string;
+  nombres: string;
+  apellidos: string;
+  tipo_documento: string;
+  numero_documento: string;
+  sexo: string;
+  fecha_nacimiento: string | null;
+  telefono: string | null;
+};
+
+const PATIENT_LITE_COLUMNS =
+  "id,nombres,apellidos,tipo_documento,numero_documento,sexo,fecha_nacimiento,telefono";
 
 /**
  * Sanitiza el término de búsqueda antes de interpolarlo en un filtro `.or()`
@@ -27,7 +43,7 @@ export async function searchPatientsAction(q: string) {
 
   let query = supabase
     .from("LIS_patients")
-    .select("id,nombres,apellidos,tipo_documento,numero_documento,sexo,fecha_nacimiento")
+    .select(PATIENT_LITE_COLUMNS)
     .eq("organization_id", ctx.activeOrgId!)
     .order("apellidos")
     .limit(10);
@@ -175,4 +191,108 @@ export async function savePatientAction(
 
   revalidatePath("/pacientes");
   return { ok: true, id: saved.id };
+}
+
+/** Un paciente por id, en forma "lite" para seleccionarlo tras crearlo. */
+export async function getPatientLiteAction(id: string): Promise<PatientLite | null> {
+  const ctx = await getSessionContext();
+  if (!ctx.activeOrgId || !id) return null;
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("LIS_patients")
+    .select(PATIENT_LITE_COLUMNS)
+    .eq("id", id)
+    .eq("organization_id", ctx.activeOrgId)
+    .maybeSingle();
+  return data ?? null;
+}
+
+export type DniLookupResult =
+  | { ok: true; person: ReniecPerson; existing: PatientLite | null }
+  | { ok: false; error: string };
+
+/**
+ * Consulta un DNI en RENIEC para autocompletar el formulario. Si ya existe un
+ * paciente con ese documento en la organización, lo devuelve para evitar
+ * duplicados.
+ */
+export async function lookupDniAction(dni: string): Promise<DniLookupResult> {
+  const ctx = await getSessionContext();
+  if (!ctx.activeOrgId) return { ok: false, error: "Sin organización activa." };
+  const clean = String(dni ?? "").trim();
+  if (!/^\d{8}$/.test(clean)) {
+    return { ok: false, error: "El DNI debe tener 8 dígitos." };
+  }
+
+  const supabase = await createClient();
+  const { data: existing } = await supabase
+    .from("LIS_patients")
+    .select(PATIENT_LITE_COLUMNS)
+    .eq("organization_id", ctx.activeOrgId)
+    .eq("tipo_documento", "DNI")
+    .eq("numero_documento", clean)
+    .maybeSingle();
+
+  let person: ReniecPerson | null;
+  try {
+    person = await lookupDni(clean);
+  } catch (err) {
+    if (err instanceof ReniecError) return { ok: false, error: err.message };
+    console.error("lookupDniAction", err);
+    return { ok: false, error: "No se pudo consultar el DNI." };
+  }
+  if (!person) return { ok: false, error: "No se encontró ninguna persona con ese DNI." };
+
+  return { ok: true, person, existing: existing ?? null };
+}
+
+export type DniPatientResult =
+  | { ok: true; patient: PatientLite; created: boolean }
+  | { ok: false; error: string };
+
+/**
+ * Flujo rápido de "Nueva atención": a partir de un DNI, devuelve el paciente
+ * existente o lo crea con los datos de RENIEC. El registro queda incompleto
+ * (sin sexo/teléfono) y así se señala en la lista de pacientes.
+ */
+export async function createPatientFromDniAction(dni: string): Promise<DniPatientResult> {
+  const ctx = await getSessionContext();
+  if (!ctx.activeOrgId) return { ok: false, error: "Sin organización activa." };
+
+  const lookup = await lookupDniAction(dni);
+  if (!lookup.ok) return { ok: false, error: lookup.error };
+  if (lookup.existing) return { ok: true, patient: lookup.existing, created: false };
+
+  const p = lookup.person;
+  const supabase = await createClient();
+  const { data: saved, error } = await supabase
+    .from("LIS_patients")
+    .insert({
+      organization_id: ctx.activeOrgId,
+      tipo_documento: "DNI",
+      numero_documento: p.dni,
+      nombres: p.nombres,
+      apellidos: p.apellidos,
+      fecha_nacimiento: p.fechaNacimiento,
+      sexo: "desconocido",
+      direccion: p.direccion,
+      metadata: { origen: "reniec" },
+    })
+    .select(PATIENT_LITE_COLUMNS)
+    .single();
+
+  if (error) {
+    // Carrera: otro registro lo creó entre la consulta y el insert.
+    if (error.code === "23505") {
+      const again = await lookupDniAction(dni);
+      if (again.ok && again.existing) {
+        return { ok: true, patient: again.existing, created: false };
+      }
+    }
+    console.error("createPatientFromDniAction insert failed", { code: error.code, message: error.message });
+    return { ok: false, error: friendlyDbError(error, "No se pudo registrar el paciente.") };
+  }
+
+  revalidatePath("/pacientes");
+  return { ok: true, patient: saved, created: true };
 }

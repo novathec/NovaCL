@@ -2,8 +2,9 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { toast } from "sonner";
-import { Save, ShieldCheck, Loader2, AlertTriangle } from "lucide-react";
+import { Save, ShieldCheck, Loader2, AlertTriangle, Send, ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -62,6 +63,10 @@ export function ResultsEntry({
 }) {
   const router = useRouter();
   const [pending, start] = useTransition();
+  // Orden completamente firmada: ya no queda trabajo de resultados, el siguiente
+  // paso del flujo es Entrega. Los inputs quedan bloqueados y Guardar/Validar no
+  // tienen efecto, así que la barra ofrece el salto al siguiente módulo.
+  const allValidated = groups.length > 0 && groups.every((g) => g.status === "validado");
   const [criticos, setCriticos] = useState<CriticalValue[]>([]);
   const [deltas, setDeltas] = useState<DeltaAlert[]>([]);
   const [avisadoA, setAvisadoA] = useState("");
@@ -231,16 +236,31 @@ export function ResultsEntry({
         </Card>
       ))}
 
-      <div className="sticky bottom-4 flex justify-end gap-2 rounded-lg border bg-card/90 p-3 shadow-lg backdrop-blur">
-        <Button variant="outline" onClick={() => run(false)} disabled={pending}>
-          {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-          Guardar borrador
-        </Button>
-        {canValidate && (
-          <Button onClick={() => run(true)} disabled={pending}>
-            {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />}
-            Validar y firmar
-          </Button>
+      <div className="sticky bottom-4 flex items-center gap-2 rounded-lg border bg-card/90 p-3 shadow-lg backdrop-blur">
+        {allValidated ? (
+          <>
+            <span className="flex-1 text-sm text-muted-foreground">
+              Orden completada y firmada. Siguiente paso: entregar al paciente.
+            </span>
+            <Button asChild>
+              <Link href="/entrega">
+                <Send className="h-4 w-4" /> Ir a Entrega <ArrowRight className="h-4 w-4" />
+              </Link>
+            </Button>
+          </>
+        ) : (
+          <div className="flex flex-1 justify-end gap-2">
+            <Button variant="outline" onClick={() => run(false)} disabled={pending}>
+              {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+              Guardar borrador
+            </Button>
+            {canValidate && (
+              <Button onClick={() => run(true)} disabled={pending}>
+                {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />}
+                Validar y firmar
+              </Button>
+            )}
+          </div>
         )}
       </div>
 

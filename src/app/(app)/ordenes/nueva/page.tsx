@@ -31,7 +31,7 @@ export default async function NuevaOrdenPage({
     patient
       ? supabase
           .from("LIS_patients")
-          .select("id,nombres,apellidos,tipo_documento,numero_documento,sexo,fecha_nacimiento")
+          .select("id,nombres,apellidos,tipo_documento,numero_documento,sexo,fecha_nacimiento,telefono")
           .eq("id", patient)
           .maybeSingle()
       : Promise.resolve({ data: null }),
