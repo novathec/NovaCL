@@ -19,6 +19,8 @@ import { PortalTopbar } from "../_components/portal-topbar";
 
 export const metadata = { title: "Mis resultados · Portal del paciente" };
 export const dynamic = "force-dynamic";
+// Seguimiento en vivo: nunca servir estado/resultados cacheados al paciente.
+export const fetchCache = "force-no-store";
 
 export default async function MisResultadosPage() {
   const session = await readPortalSession();
@@ -35,7 +37,7 @@ export default async function MisResultadosPage() {
       className="theme-light min-h-screen bg-slate-50"
       style={{ ["--portal-accent" as string]: "#0f8a8d" }}
     >
-      <PortalTopbar nombre={session.nombre} />
+      <PortalTopbar nombre={session.nombre} expiresAt={session.exp * 1000} />
 
       <main className="mx-auto max-w-5xl px-4 py-8 sm:px-6 sm:py-10">
         {/* Saludo */}
@@ -187,9 +189,8 @@ function ReadyCard({ order }: { order: PortalOrderCard }) {
 function ProcessCard({ order }: { order: PortalOrderCard }) {
   const timeline = buildPortalTimeline(order.status, {
     reportReady: order.reportReady,
+    sampleStatus: order.sampleStatus,
   });
-  const currentLabel =
-    timeline.steps[timeline.currentIndex]?.label ?? "En proceso";
 
   return (
     <Link
@@ -205,7 +206,7 @@ function ProcessCard({ order }: { order: PortalOrderCard }) {
         </div>
         <span className="inline-flex items-center gap-1.5 rounded-full bg-[var(--portal-accent)]/10 px-2.5 py-1 text-xs font-medium text-[var(--portal-accent)]">
           <span className="flex h-1.5 w-1.5 animate-pulse rounded-full bg-[var(--portal-accent)]" />
-          {currentLabel}
+          {timeline.stageLabel}
         </span>
       </div>
 

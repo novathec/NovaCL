@@ -3,16 +3,18 @@ import { redirect, notFound } from "next/navigation";
 import { ArrowLeft, ShieldCheck } from "lucide-react";
 import { createAdminClient } from "@/lib/supabase/server";
 import { readPortalSession } from "@/lib/portal/session";
-import { getPortalOrder } from "@/lib/portal/data";
-import { buildPortalTimeline } from "@/lib/portal/timeline";
+import { getPortalOrder, getPortalOrderStudies } from "@/lib/portal/data";
+import { buildPortalTimeline, buildStudyStage } from "@/lib/portal/timeline";
 import { buildOrderReport } from "@/lib/reports";
-import { PortalTimeline } from "@/components/portal/portal-timeline";
+import { PortalTimeline, StudyBreakdown } from "@/components/portal/portal-timeline";
 import { ResultsReport } from "@/components/results/results-report";
 import { PrintButton } from "@/components/results/print-button";
 import { PortalTopbar } from "../../_components/portal-topbar";
 
 export const metadata = { title: "Seguimiento · Portal del paciente" };
 export const dynamic = "force-dynamic";
+// Seguimiento en vivo: nunca servir estado/resultados cacheados al paciente.
+export const fetchCache = "force-no-store";
 
 export default async function PortalOrderPage({
   params,
@@ -31,7 +33,13 @@ export default async function PortalOrderPage({
 
   const timeline = buildPortalTimeline(order.status, {
     reportReady: order.reportReady,
+    sampleStatus: order.sampleStatus,
   });
+
+  // Desglose por estudio (cada examen avanza a su propio ritmo).
+  const studies = (await getPortalOrderStudies(admin, id, session.pids)).map(
+    (s) => ({ nombre: s.nombre, stage: buildStudyStage(s) })
+  );
 
   // onlyValidated=true: el paciente solo ve resultados firmados.
   const report = order.reportReady ? await buildOrderReport(admin, id, true) : null;
@@ -42,7 +50,7 @@ export default async function PortalOrderPage({
       className="theme-light min-h-screen bg-slate-50 print:bg-white"
       style={{ ["--portal-accent" as string]: "#0f8a8d" }}
     >
-      <PortalTopbar nombre={session.nombre} />
+      <PortalTopbar nombre={session.nombre} expiresAt={session.exp * 1000} />
 
       <div className="no-print border-b border-slate-200 bg-white">
         <div className="mx-auto flex max-w-4xl items-center justify-between px-4 py-3 sm:px-6">
@@ -65,8 +73,9 @@ export default async function PortalOrderPage({
         </div>
 
         {/* Seguimiento (no se imprime: el PDF es el informe clínico) */}
-        <div className="no-print mb-6">
+        <div className="no-print mb-6 space-y-4">
           <PortalTimeline timeline={timeline} />
+          {studies.length > 1 && <StudyBreakdown studies={studies} />}
         </div>
 
         {hasReport ? (

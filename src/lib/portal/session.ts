@@ -14,7 +14,13 @@ import { cookies } from "next/headers";
  * organizaciones). El portal solo muestra órdenes de esos registros.
  */
 export const PORTAL_COOKIE = "nova_portal";
-const DEFAULT_MAX_AGE = 60 * 60 * 8; // 8 horas
+/**
+ * Vida de la sesión del portal: 10 minutos, por seguridad (datos de salud en
+ * un dispositivo posiblemente compartido). No se persiste entre reinicios del
+ * navegador: la cookie es de sesión y, además, el token firmado caduca a los
+ * 10 minutos y el servidor lo rechaza aunque la cookie siga presente.
+ */
+export const SESSION_TTL_SECONDS = 10 * 60;
 
 export type PortalSession = {
   /** Número de documento normalizado. */
@@ -48,7 +54,7 @@ function sign(payload: string): string {
 /** Serializa y firma la sesión como `<payload>.<firma>`. */
 export function encodePortalSession(
   data: Omit<PortalSession, "exp">,
-  maxAgeSeconds = DEFAULT_MAX_AGE
+  maxAgeSeconds = SESSION_TTL_SECONDS
 ): string {
   const body: PortalSession = {
     ...data,
@@ -94,15 +100,17 @@ export function decodePortalSession(token?: string | null): PortalSession | null
 /** Escribe la cookie de sesión del portal. */
 export async function setPortalSession(
   data: Omit<PortalSession, "exp">,
-  maxAgeSeconds = DEFAULT_MAX_AGE
+  maxAgeSeconds = SESSION_TTL_SECONDS
 ): Promise<void> {
   const cookieStore = await cookies();
+  // Sin `maxAge`/`expires`: cookie de sesión (no se guarda en disco, muere al
+  // cerrar el navegador). La caducidad real la impone el `exp` firmado, que el
+  // servidor valida en cada request.
   cookieStore.set(PORTAL_COOKIE, encodePortalSession(data, maxAgeSeconds), {
     path: "/portal",
     httpOnly: true,
     sameSite: "lax",
     secure: process.env.NODE_ENV === "production",
-    maxAge: maxAgeSeconds,
   });
 }
 

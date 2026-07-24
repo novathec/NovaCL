@@ -4,7 +4,12 @@ import { redirect } from "next/navigation";
 import { headers } from "next/headers";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createAdminClient } from "@/lib/supabase/server";
-import { setPortalSession, clearPortalSession } from "@/lib/portal/session";
+import {
+  setPortalSession,
+  clearPortalSession,
+  readPortalSession,
+  SESSION_TTL_SECONDS,
+} from "@/lib/portal/session";
 
 export type PortalActionState = { error?: string } | undefined;
 
@@ -93,6 +98,24 @@ export async function linkPortalAction(
   });
 
   redirect("/portal/mis-resultados");
+}
+
+/**
+ * Renueva la sesión del portal por otros 10 minutos ("mantener sesión"). Solo
+ * funciona si la sesión aún es válida; si ya caducó, devuelve null y el cliente
+ * cierra la sesión. Re-emite la cookie firmada con un nuevo `exp`.
+ */
+export async function refreshPortalSessionAction(): Promise<{ exp: number } | null> {
+  const session = await readPortalSession();
+  if (!session) return null;
+  await setPortalSession({
+    doc: session.doc,
+    tipo: session.tipo,
+    dob: session.dob,
+    pids: session.pids,
+    nombre: session.nombre,
+  });
+  return { exp: Math.floor(Date.now() / 1000) + SESSION_TTL_SECONDS };
 }
 
 /** Cierra la sesión del portal y vuelve al acceso. */

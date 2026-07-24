@@ -1,7 +1,45 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { Database, ResultFlag, OrderStatus } from "@/lib/database.types";
+import type {
+  Database,
+  ResultFlag,
+  OrderStatus,
+  SampleStatus,
+  ItemStatus,
+} from "@/lib/database.types";
 
 type DB = SupabaseClient<Database>;
+
+// Progreso relativo de una muestra (para elegir la menos avanzada de la orden).
+const SAMPLE_RANK: Record<SampleStatus, number> = {
+  pendiente: 0,
+  tomada: 1,
+  en_transito: 2,
+  recibida: 3,
+  en_analisis: 4,
+  procesada: 5,
+  rechazada: -1, // se ignora en el agregado
+};
+
+/**
+ * Estado representativo de la muestra de una orden = la muestra NO rechazada
+ * menos avanzada. Refleja "hasta dónde llegó todo lo necesario para la orden";
+ * null si no hay muestras o todas fueron rechazadas.
+ */
+function representativeSample(
+  statuses: SampleStatus[]
+): SampleStatus | null {
+  let best: SampleStatus | null = null;
+  let bestRank = Infinity;
+  for (const s of statuses) {
+    const r = SAMPLE_RANK[s];
+    if (r < 0) continue; // rechazada
+    if (r < bestRank) {
+      bestRank = r;
+      best = s;
+    }
+  }
+  return best;
+}
 
 export type PortalOrderCard = {
   id: string;
@@ -24,6 +62,8 @@ export type PortalOrderCard = {
   critico: boolean;
   /** Fecha del último resultado validado (para "listo desde"). */
   validadoAt: string | null;
+  /** Estado representativo de la muestra (afina el seguimiento). */
+  sampleStatus: SampleStatus | null;
 };
 
 const CRITICAL_FLAGS: ResultFlag[] = ["critico_alto", "critico_bajo"];
@@ -71,6 +111,20 @@ export async function getPortalOrders(
   }
   const itemIds = [...itemToOrder.keys()];
 
+  // Muestras de las órdenes -> estado representativo por orden (afina el
+  // seguimiento pre-analítico con el estado físico real de la muestra).
+  const { data: samples } = await admin
+    .from("LIS_samples")
+    .select("order_id, status")
+    .in("order_id", orderIds);
+
+  const samplesByOrder = new Map<string, SampleStatus[]>();
+  for (const s of samples ?? []) {
+    const arr = samplesByOrder.get(s.order_id) ?? [];
+    arr.push(s.status);
+    samplesByOrder.set(s.order_id, arr);
+  }
+
   let results: { order_item_id: string; flag: ResultFlag | null; validado_at: string | null }[] = [];
   if (itemIds.length) {
     const { data } = await admin
@@ -116,6 +170,7 @@ export async function getPortalOrders(
       anormales: agg?.anormales ?? 0,
       critico: agg?.critico ?? false,
       validadoAt: agg?.validadoAt ?? null,
+      sampleStatus: representativeSample(samplesByOrder.get(o.id) ?? []),
     };
   });
 }
@@ -124,6 +179,7 @@ export type PortalOrderMeta = {
   status: OrderStatus;
   codigo: string;
   reportReady: boolean;
+  sampleStatus: SampleStatus | null;
 };
 
 /**
@@ -162,5 +218,82 @@ export async function getPortalOrder(
     reportReady = (count ?? 0) > 0;
   }
 
-  return { status: order.status, codigo: order.codigo, reportReady };
+  // Estado representativo de la muestra de la orden.
+  const { data: samples } = await admin
+    .from("LIS_samples")
+    .select("status")
+    .eq("order_id", orderId);
+  const sampleStatus = representativeSample((samples ?? []).map((s) => s.status));
+
+  return { status: order.status, codigo: order.codigo, reportReady, sampleStatus };
+}
+
+export type PortalStudy = {
+  id: string;
+  nombre: string;
+  itemStatus: ItemStatus;
+  sampleStatus: SampleStatus | null;
+  hasValidated: boolean;
+};
+
+/**
+ * Estado por estudio (order_item) de una orden. Cada estudio avanza por su
+ * cuenta: devuelve su estado de ítem, el estado representativo de SU muestra
+ * (vía sample_items) y si ya tiene resultado validado. Excluye anulados.
+ * Verifica pertenencia por `pids` (autorización).
+ */
+export async function getPortalOrderStudies(
+  admin: DB,
+  orderId: string,
+  pids: string[]
+): Promise<PortalStudy[]> {
+  if (pids.length === 0) return [];
+  const { data: owner } = await admin
+    .from("LIS_orders")
+    .select("id")
+    .eq("id", orderId)
+    .in("patient_id", pids)
+    .maybeSingle();
+  if (!owner) return [];
+
+  const { data: items } = await admin
+    .from("LIS_order_items")
+    .select("id, study_nombre, status, created_at")
+    .eq("order_id", orderId)
+    .neq("status", "anulado")
+    .order("created_at");
+  if (!items || items.length === 0) return [];
+  const itemIds = items.map((i) => i.id);
+
+  // Muestras por estudio (vía sample_items): estado representativo (menos
+  // avanzado, ignorando rechazadas) de las muestras que cubren cada estudio.
+  const { data: sampleLinks } = await admin
+    .from("LIS_sample_items")
+    .select("order_item_id, LIS_samples(status)")
+    .in("order_item_id", itemIds);
+
+  const samplesByItem = new Map<string, SampleStatus[]>();
+  for (const link of sampleLinks ?? []) {
+    const st = (link.LIS_samples as unknown as { status: SampleStatus } | null)?.status;
+    if (!st) continue;
+    const arr = samplesByItem.get(link.order_item_id) ?? [];
+    arr.push(st);
+    samplesByItem.set(link.order_item_id, arr);
+  }
+
+  // Estudios con al menos un resultado validado.
+  const { data: validated } = await admin
+    .from("LIS_results")
+    .select("order_item_id")
+    .in("order_item_id", itemIds)
+    .eq("status", "validado");
+  const validatedItems = new Set((validated ?? []).map((r) => r.order_item_id));
+
+  return items.map((it) => ({
+    id: it.id,
+    nombre: it.study_nombre,
+    itemStatus: it.status,
+    sampleStatus: representativeSample(samplesByItem.get(it.id) ?? []),
+    hasValidated: validatedItems.has(it.id),
+  }));
 }

@@ -2,12 +2,20 @@ import Image from "next/image";
 import Link from "next/link";
 import { LogOut, User } from "lucide-react";
 import { portalLogoutAction } from "@/lib/actions/portal";
+import { SessionGuard } from "./session-guard";
 
 /**
  * Cabecera del portal del paciente. `nombre` presente => sesión activa
- * (muestra el nombre y el botón de salir). No se imprime.
+ * (muestra el nombre y el botón de salir). `expiresAt` (epoch ms) activa el
+ * vigilante de caducidad de sesión. No se imprime.
  */
-export function PortalTopbar({ nombre }: { nombre?: string }) {
+export function PortalTopbar({
+  nombre,
+  expiresAt,
+}: {
+  nombre?: string;
+  expiresAt?: number;
+}) {
   return (
     <header className="no-print sticky top-0 z-20 border-b border-slate-200 bg-white/90 backdrop-blur">
       <div className="mx-auto flex max-w-5xl items-center justify-between gap-3 px-4 py-3 sm:px-6">
@@ -47,6 +55,8 @@ export function PortalTopbar({ nombre }: { nombre?: string }) {
           </div>
         )}
       </div>
+
+      {expiresAt != null && <SessionGuard expiresAt={expiresAt} />}
     </header>
   );
 }
