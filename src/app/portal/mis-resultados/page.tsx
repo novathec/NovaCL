@@ -12,8 +12,8 @@ import {
 import { createAdminClient } from "@/lib/supabase/server";
 import { readPortalSession } from "@/lib/portal/session";
 import { getPortalOrders, type PortalOrderCard } from "@/lib/portal/data";
-import { buildPortalTimeline } from "@/lib/portal/timeline";
-import { TimelineStepper } from "@/components/portal/portal-timeline";
+import { buildPortalTimeline, buildStudyStage } from "@/lib/portal/timeline";
+import { TimelineStepper, StudyRows } from "@/components/portal/portal-timeline";
 import { formatDate } from "@/lib/utils";
 import { PortalTopbar } from "../_components/portal-topbar";
 
@@ -172,7 +172,21 @@ function ReadyCard({ order }: { order: PortalOrderCard }) {
         </p>
       </div>
 
-      <div className="mt-4 flex items-center justify-between border-t border-slate-100 pt-3">
+      {/* Parcial: mostrar qué estudios ya están y cuáles siguen en proceso */}
+      {order.estudiosTotal > order.estudiosListos && (
+        <div className="mt-3 border-t border-slate-100 pt-1">
+          <StudyRows
+            studies={order.studies.map((s) => ({
+              nombre: s.nombre,
+              stage: buildStudyStage(s),
+            }))}
+            max={4}
+            compact
+          />
+        </div>
+      )}
+
+      <div className="mt-3 flex items-center justify-between border-t border-slate-100 pt-3">
         <span className="inline-flex items-center gap-1.5 text-xs font-medium text-emerald-600">
           <CheckCircle2 className="h-3.5 w-3.5" /> Listo para ver
         </span>
@@ -218,11 +232,19 @@ function ProcessCard({ order }: { order: PortalOrderCard }) {
         <TimelineStepper timeline={timeline} />
       </div>
 
-      <div className="mt-4 flex items-center justify-between border-t border-slate-100 pt-3">
-        <span className="text-xs text-slate-500">
-          {order.estudiosTotal}{" "}
-          {order.estudiosTotal === 1 ? "estudio" : "estudios"}
-        </span>
+      {/* Desglose por estudio: cada examen con su propio estado */}
+      <div className="mt-3 border-t border-slate-100 pt-1">
+        <StudyRows
+          studies={order.studies.map((s) => ({
+            nombre: s.nombre,
+            stage: buildStudyStage(s),
+          }))}
+          max={4}
+          compact
+        />
+      </div>
+
+      <div className="mt-2 flex items-center justify-end border-t border-slate-100 pt-3">
         <span className="inline-flex items-center gap-1 text-sm font-semibold text-[var(--portal-accent)]">
           Ver seguimiento
           <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />

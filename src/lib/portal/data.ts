@@ -64,6 +64,8 @@ export type PortalOrderCard = {
   validadoAt: string | null;
   /** Estado representativo de la muestra (afina el seguimiento). */
   sampleStatus: SampleStatus | null;
+  /** Desglose por estudio (cada examen avanza a su ritmo). */
+  studies: PortalStudy[];
 };
 
 const CRITICAL_FLAGS: ResultFlag[] = ["critico_alto", "critico_bajo"];
@@ -96,33 +98,39 @@ export async function getPortalOrders(
   if (!orders || orders.length === 0) return [];
   const orderIds = orders.map((o) => o.id);
 
-  // Ítems vivos de esas órdenes -> total de estudios y mapeo resultado→orden.
+  // Ítems vivos de esas órdenes (un ítem = un estudio).
   const { data: items } = await admin
     .from("LIS_order_items")
-    .select("id, order_id")
+    .select("id, order_id, study_nombre, status, created_at")
     .in("order_id", orderIds)
-    .neq("status", "anulado");
+    .neq("status", "anulado")
+    .order("created_at");
 
   const itemToOrder = new Map<string, string>();
-  const totalByOrder = new Map<string, number>();
+  const itemsByOrder = new Map<string, typeof items>();
   for (const it of items ?? []) {
     itemToOrder.set(it.id, it.order_id);
-    totalByOrder.set(it.order_id, (totalByOrder.get(it.order_id) ?? 0) + 1);
+    const arr = itemsByOrder.get(it.order_id) ?? [];
+    arr.push(it);
+    itemsByOrder.set(it.order_id, arr);
   }
   const itemIds = [...itemToOrder.keys()];
 
-  // Muestras de las órdenes -> estado representativo por orden (afina el
-  // seguimiento pre-analítico con el estado físico real de la muestra).
-  const { data: samples } = await admin
-    .from("LIS_samples")
-    .select("order_id, status")
-    .in("order_id", orderIds);
-
-  const samplesByOrder = new Map<string, SampleStatus[]>();
-  for (const s of samples ?? []) {
-    const arr = samplesByOrder.get(s.order_id) ?? [];
-    arr.push(s.status);
-    samplesByOrder.set(s.order_id, arr);
+  // Muestra representativa POR ESTUDIO (vía sample_items) -> el seguimiento por
+  // estudio y, agregando, el de la orden.
+  const sampleByItem = new Map<string, SampleStatus[]>();
+  if (itemIds.length) {
+    const { data: links } = await admin
+      .from("LIS_sample_items")
+      .select("order_item_id, LIS_samples(status)")
+      .in("order_item_id", itemIds);
+    for (const link of links ?? []) {
+      const st = (link.LIS_samples as unknown as { status: SampleStatus } | null)?.status;
+      if (!st) continue;
+      const arr = sampleByItem.get(link.order_item_id) ?? [];
+      arr.push(st);
+      sampleByItem.set(link.order_item_id, arr);
+    }
   }
 
   let results: { order_item_id: string; flag: ResultFlag | null; validado_at: string | null }[] = [];
@@ -152,10 +160,24 @@ export async function getPortalOrders(
     }
     byOrder.set(orderId, agg);
   }
+  const validatedItems = new Set(results.map((r) => r.order_item_id));
 
   return orders.map((o) => {
     const agg = byOrder.get(o.id);
     const estudiosListos = agg?.listos.size ?? 0;
+    const orderItems = itemsByOrder.get(o.id) ?? [];
+
+    const studies: PortalStudy[] = orderItems.map((it) => ({
+      id: it.id,
+      nombre: it.study_nombre,
+      itemStatus: it.status,
+      sampleStatus: representativeSample(sampleByItem.get(it.id) ?? []),
+      hasValidated: validatedItems.has(it.id),
+    }));
+
+    // Muestra representativa de la orden = la menos avanzada entre sus estudios.
+    const allSamples = orderItems.flatMap((it) => sampleByItem.get(it.id) ?? []);
+
     return {
       id: o.id,
       codigo: o.codigo,
@@ -164,13 +186,14 @@ export async function getPortalOrders(
       sede: (o.sedes as unknown as { nombre: string } | null)?.nombre ?? "",
       medico: o.medico_solicitante,
       status: o.status,
-      estudiosTotal: totalByOrder.get(o.id) ?? 0,
+      estudiosTotal: orderItems.length,
       estudiosListos,
       reportReady: estudiosListos > 0,
       anormales: agg?.anormales ?? 0,
       critico: agg?.critico ?? false,
       validadoAt: agg?.validadoAt ?? null,
-      sampleStatus: representativeSample(samplesByOrder.get(o.id) ?? []),
+      sampleStatus: representativeSample(allSamples),
+      studies,
     };
   });
 }

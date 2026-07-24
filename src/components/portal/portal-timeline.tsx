@@ -212,7 +212,7 @@ export function StudyBreakdown({
 
   return (
     <div className="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6">
-      <div className="mb-4 flex items-center justify-between">
+      <div className="mb-2 flex items-center justify-between">
         <h3 className="flex items-center gap-2 text-sm font-semibold text-slate-800">
           <ListChecks className="h-4.5 w-4.5 text-slate-400" />
           Detalle por estudio
@@ -221,21 +221,58 @@ export function StudyBreakdown({
           {listos} de {studies.length} listo{studies.length === 1 ? "" : "s"}
         </span>
       </div>
-
-      <ul className="divide-y divide-slate-100">
-        {studies.map(({ nombre, stage }) => (
-          <li key={nombre} className="flex items-center justify-between gap-3 py-3">
-            <div className="min-w-0">
-              <p className="truncate text-sm font-medium text-slate-800">
-                {nombre}
-              </p>
-              <p className="mt-0.5 text-xs text-slate-400">{stage.hint}</p>
-            </div>
-            <StudyStageChip stage={stage} />
-          </li>
-        ))}
-      </ul>
+      <StudyRows studies={studies} />
     </div>
+  );
+}
+
+/**
+ * Filas por estudio (nombre + detalle + chip de estado). Compartido entre el
+ * detalle de la orden y las tarjetas del dashboard. `max` limita cuántas se
+ * muestran (el resto se resume en "+N más").
+ */
+export function StudyRows({
+  studies,
+  max,
+  compact,
+}: {
+  studies: { nombre: string; stage: StudyStage }[];
+  max?: number;
+  compact?: boolean;
+}) {
+  const shown = max ? studies.slice(0, max) : studies;
+  const rest = studies.length - shown.length;
+
+  return (
+    <ul className="divide-y divide-slate-100">
+      {shown.map(({ nombre, stage }) => (
+        <li
+          key={nombre}
+          className={cn(
+            "flex items-center justify-between gap-3",
+            compact ? "py-2" : "py-3"
+          )}
+        >
+          <div className="min-w-0">
+            <p
+              className={cn(
+                "truncate font-medium text-slate-800",
+                compact ? "text-[13px]" : "text-sm"
+              )}
+            >
+              {nombre}
+            </p>
+            {!compact && (
+              <p className="mt-0.5 text-xs text-slate-400">{stage.hint}</p>
+            )}
+          </div>
+          <StudyStageChip stage={stage} />
+        </li>
+      ))}
+      {rest > 0 && (
+        <li className="py-2 text-xs text-slate-400">+{rest} estudio{rest === 1 ? "" : "s"} más</li>
+      )}
+    </ul>
   );
 }
 

@@ -25,6 +25,21 @@ export function SessionGuard({ expiresAt: initialExpiresAt }: { expiresAt: numbe
   const logoutRef = useRef<HTMLFormElement>(null);
   const loggingOut = useRef(false);
 
+  // Seguridad: al RECARGAR la página (F5 / refrescar), cerramos la sesión y
+  // volvemos al acceso. Las navegaciones dentro del portal (clic en enlaces)
+  // no recargan el documento, así que no se ven afectadas. Solo la recarga
+  // real de la página dispara el cierre.
+  useEffect(() => {
+    const nav = performance.getEntriesByType("navigation")[0] as
+      | PerformanceNavigationTiming
+      | undefined;
+    if (nav?.type === "reload" && !loggingOut.current) {
+      loggingOut.current = true;
+      logoutRef.current?.requestSubmit();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Si el servidor entrega un nuevo `exp` (p. ej. al navegar), lo adoptamos.
   useEffect(() => {
     setExpiresAt(initialExpiresAt);
